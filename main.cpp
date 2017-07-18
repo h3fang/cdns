@@ -12,6 +12,20 @@
 
 int sfd = -1;
 
+int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
+  memset(addr, 0, sizeof(*addr));
+  addr->sin_family = AF_INET;
+  addr->sin_port = htons(port);
+  return inet_pton(AF_INET, ip, &(addr->sin_addr.s_addr));
+}
+
+int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr) {
+  memset(addr, 0, sizeof(*addr));
+  addr->sin6_family = AF_INET6;
+  addr->sin6_port = htons(port);
+  return inet_pton(AF_INET6, ip, &(addr->sin6_addr.s6_addr));
+}
+
 int create_udp_socket(int type) {
     int s = socket(type, SOCK_DGRAM, 0);
     if (s < 0) {
@@ -25,18 +39,12 @@ int create_udp_socket(int type) {
     struct sockaddr_in6 addr6;
 
     if (type == AF_INET) {
-        bzero(&addr4, sizeof(addr4));
-        addr4.sin_family = AF_INET;
-        addr4.sin_port = htons(0);
-        addr4.sin_addr.s_addr = INADDR_ANY;
+        uv_ip4_addr("0.0.0.0", 0, &addr4);
         addr = (struct sockaddr *)&addr4;
         addr_size = sizeof(addr4);
     }
     else if (type == AF_INET6) {
-        bzero(&addr6,sizeof(addr6));
-        addr6.sin6_family = AF_INET6;
-        addr6.sin6_port = htons(0);
-        addr6.sin6_addr = in6addr_any;
+        uv_ip6_addr("::", 0, &addr6);
         addr = (struct sockaddr *)&addr6;
         addr_size = sizeof(addr6);
     }
@@ -133,17 +141,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in6 addr;
-        bzero(&addr,sizeof(addr));
-        addr.sin6_family = AF_INET6;
-        addr.sin6_port = htons(53);
-
-        unsigned char buf[sizeof(struct in6_addr)];
-        if (inet_pton(AF_INET6, "2001:4860:4860::8888", buf) <= 0) {
-            close(s);
-            std::cerr << "Failed to convert ip address\n";
-            return false;
-        }
-        memcpy(&addr.sin6_addr, buf, sizeof(addr.sin6_addr));
+        uv_ip6_addr("2001:4860:4860::8888", 53, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
@@ -159,10 +157,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in addr;
-        bzero(&addr,sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(53);
-        addr.sin_addr.s_addr = inet_addr("223.6.6.6");
+        uv_ip4_addr("223.6.6.6", 53, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
@@ -194,10 +189,7 @@ int main()
     }
 
     struct sockaddr_in6 addr;
-    bzero(&addr,sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_port = htons(53);
-    addr.sin6_addr = in6addr_loopback;
+    uv_ip6_addr("::1", 53, &addr);
 
     if(bind(sfd, (struct sockaddr *)&addr, sizeof(addr))<0) {
         std::cerr << "Failed to bind\n";
