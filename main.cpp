@@ -123,8 +123,10 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
 
     uint16_t query_type = ntohs(*(uint16_t*)(data_ptr+12+hostname.size()+1));
 
+    int s = -1;
+
     if (query_type == 28) { // AAAA
-        int s = create_udp_socket(AF_INET6);
+        s = create_udp_socket(AF_INET6);
         if (s < 0) {
             std::cerr << "Failed to create and bind socket on ::1\n";
             return false;
@@ -143,19 +145,14 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
         memcpy(&addr.sin6_addr, buf, sizeof(addr.sin6_addr));
 
-        sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr));
-
-        data_size = recvfrom(s, data_ptr, 2048, 0, NULL, 0);
-
-        close(s);
-
-        if (data_size <= 0) {
-            std::cerr << "Failed to receive response package\n";
+        if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
+            close(s);
+            std::cerr << "Failed to send query data\n";
             return false;
         }
     }
     else {
-        int s = create_udp_socket(AF_INET);
+        s = create_udp_socket(AF_INET);
         if (s < 0) {
             std::cerr << "Failed to create and bind socket on 127.0.0.1\n";
             return false;
@@ -172,15 +169,15 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
             std::cerr << "Failed to send query data\n";
             return false;
         }
+    }
 
-        data_size = recvfrom(s, data_ptr, 2048, 0, NULL, NULL);
+    data_size = recvfrom(s, data_ptr, 2048, 0, NULL, 0);
 
-        close(s);
+    close(s);
 
-        if (data_size <= 0) {
-            std::cerr << "Failed to receive response package\n";
-            return false;
-        }
+    if (data_size <= 0) {
+        std::cerr << "Failed to receive response package\n";
+        return false;
     }
 
     sendto(sfd, data_ptr, data_size, 0, (struct sockaddr *)&client_addr, addr_length);
