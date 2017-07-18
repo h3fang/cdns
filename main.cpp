@@ -46,8 +46,8 @@ int create_udp_socket(int type) {
     }
 
     struct timeval tv;
-    tv.tv_sec = 3;  /* 30 Secs Timeout */
-    tv.tv_usec = 0;  // Not init'ing this can cause strange errors
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(struct timeval));
 
     if(bind(s, addr, addr_size) < 0) {
