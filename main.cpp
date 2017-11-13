@@ -157,7 +157,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in addr;
-        uv_ip4_addr("223.6.6.6", 53, &addr);
+        uv_ip4_addr("119.29.29.29", 53, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
