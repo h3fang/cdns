@@ -12,3 +12,6 @@ $(TARGET): main.cpp
 
 install: $(TARGET)
 	install -m 755 -o root $(TARGET) /usr/local/bin/$(TARGET)
+
+clean:
+	rm -f $(TARGET) *.o
