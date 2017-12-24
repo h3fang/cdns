@@ -10,6 +10,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+const char *DNS_V4 = "119.29.29.29";
+const char *DNS_V6 = "2001:4860:4860::8888";
+
 int sfd = -1;
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
@@ -141,7 +144,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in6 addr;
-        uv_ip6_addr("2001:4860:4860::8888", 53, &addr);
+        uv_ip6_addr(DNS_V6, 53, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
@@ -157,7 +160,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in addr;
-        uv_ip4_addr("119.29.29.29", 53, &addr);
+        uv_ip4_addr(DNS_V4, 53, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
