@@ -6,7 +6,7 @@ TARGET = cdns
 ####### Compile
 
 $(TARGET): main.cpp 
-	g++ -c $(CXXFLAGS) -o $(TARGET) main.cpp
+	g++ $(CXXFLAGS) -o $(TARGET) -lpthread main.cpp
 
 ####### Install
 
