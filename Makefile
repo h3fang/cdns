@@ -1,6 +1,6 @@
 ####### Compiler, tools and options
 
-CXXFLAGS      = -O2 -march=x86-64 -mtune=generic -std=gnu++1y
+CXXFLAGS = -pipe -O2 -march=native -mtune=native
 TARGET = cdns
 
 ####### Compile
