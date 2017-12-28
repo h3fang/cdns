@@ -1,0 +1,7 @@
+cmake_minimum_required (VERSION 2.6)
+project (cdns)
+set(CMAKE_BUILD_TYPE Release)
+file(GLOB SOURCES "*.cpp")
+add_executable(cdns ${SOURCES})
+target_link_libraries (cdns pthread curl)
+install (TARGETS cdns DESTINATION bin)
