@@ -12,7 +12,7 @@
 
 //const char *DNS_V4 = "119.29.29.29";
 const char *DNS_V4 = "202.120.2.101";
-const char *DNS_V6 = "2001:4860:4860::8888";
+const char *DNS_V6 = "2001:4860:4860::8844";
 
 int sfd = -1;
 
