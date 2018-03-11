@@ -3,7 +3,7 @@
 CXX = g++
 CXXFLAGS = -pipe -O2 -march=native -mtune=native
 CPPFLAGS = -MMD -MP
-LDFLAGS = -lpthread -lcurl
+LDFLAGS = -lpthread
 TARGET = cdns
 
 ####### Compile
