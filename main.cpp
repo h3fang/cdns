@@ -184,8 +184,27 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
     return true;
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    int c;
+    int port = 53; // local DNS port
+
+    while ((c = getopt(argc, argv, "4:6:p:")) != -1) {
+        switch (c) {
+        case '4':
+            DNS_V4 = optarg;
+            break;
+        case '6':
+            DNS_V6 = optarg;
+            break;
+        case 'p':
+            port = strtol(optarg, nullptr, 10);
+            break;
+        default:
+            return 1;
+        }
+    }
+
     sfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if(sfd < 0) {
         std::cerr << "Failed to create socket\n";
