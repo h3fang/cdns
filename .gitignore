@@ -1,5 +1,6 @@
 *.pro.user
 *.o
+*.d
 CMakeLists.txt.user
 cdns
 build/
