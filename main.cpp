@@ -10,11 +10,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-const char *DNS_V4 = "119.29.29.29";
-//const char *DNS_V4 = "202.120.2.101";
-const char *DNS_V6 = "2001:4860:4860::8844";
+static const char *DNS_V4 = "119.29.29.29";
+// static const char *DNS_V4 = "202.120.2.101";
+static const char *DNS_V6 = "2001:4860:4860::8844";
 
-int sfd = -1;
+static int sfd = -1;
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
   memset(addr, 0, sizeof(*addr));
