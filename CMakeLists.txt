@@ -1,8 +1,8 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.0)
 project (cdns)
 set(CMAKE_BUILD_TYPE Release)
-file(GLOB SOURCES "*.cpp")
-add_executable(cdns ${SOURCES})
+add_executable(cdns main.cpp)
 set_property(TARGET cdns PROPERTY CXX_STANDARD 17)
 target_link_libraries (cdns pthread)
+# installs to /usr/local/bin as intended
 install (TARGETS cdns DESTINATION bin)
