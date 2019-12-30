@@ -15,6 +15,7 @@ static const char *DNS_V4 = "114.114.114.114";
 static const char *DNS_V6 = "2001:4860:4860::8844";
 static const int DNS_PORT = 53;
 static int relay_socket = -1;
+static const int relay_buffer_size = 2048;
 static std::mutex relay_socket_mtx;
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
@@ -94,13 +95,13 @@ std::string get_hostname_form_sequence(const char *s) {
     return r;
 }
 
-bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, socklen_t addr_length) {
-    std::unique_ptr<char[]> data(data_ptr);
-
+bool resolve(std::shared_ptr<char[]>&& ptr, int data_size, const sockaddr_in6 client_addr, socklen_t addr_length) {
     if (data_size < 12) {
         std::cerr << "Invalid datagram size: " << data_size << std::endl;
         return false;
     }
+
+    char* data_ptr = ptr.get();
 
     // check for QR bit, should be 0 (query)
     if ((*(data_ptr+2) & 0b10000000) != 0) {
@@ -171,7 +172,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
     }
 
-    data_size = recvfrom(s, data_ptr, 2048, 0, NULL, 0);
+    data_size = recvfrom(s, data_ptr, relay_buffer_size, 0, NULL, 0);
 
     close(s);
 
@@ -219,16 +220,15 @@ int main(int argc, char **argv)
     }
 
     while (true) {
-        char* data_ptr = new char[2048];
-        int data_size = 0;
+        auto relay_buffer = std::make_shared<char[]>(relay_buffer_size);
         sockaddr_in6 client_addr;
         socklen_t addr_length = sizeof(client_addr);
 
         bzero(&client_addr, addr_length);
 
-        data_size = recvfrom(relay_socket, data_ptr, 2048, 0, (struct sockaddr *)&client_addr, &addr_length);
+        int data_size = recvfrom(relay_socket, relay_buffer.get(), relay_buffer_size, 0, (struct sockaddr *)&client_addr, &addr_length);
 
-        std::thread(resolve, data_ptr, data_size, client_addr, addr_length).detach();
+        std::thread(resolve, relay_buffer, data_size, client_addr, addr_length).detach();
     }
 
     return 0;
