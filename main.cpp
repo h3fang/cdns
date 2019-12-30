@@ -2,6 +2,7 @@
 #include <string>
 #include <iostream>
 #include <thread>
+#include <mutex>
 #include <cstring>
 
 #include <unistd.h>
@@ -14,6 +15,7 @@ static const char *DNS_V4 = "114.114.114.114";
 static const char *DNS_V6 = "2001:4860:4860::8844";
 static const int DNS_PORT = 53;
 static int relay_socket = -1;
+static std::mutex relay_socket_mtx;
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
   memset(addr, 0, sizeof(*addr));
@@ -178,7 +180,9 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         return false;
     }
 
+    relay_socket_mtx.lock();
     sendto(relay_socket, data_ptr, data_size, 0, (struct sockaddr *)&client_addr, addr_length);
+    relay_socket_mtx.unlock();
 
     return true;
 }
