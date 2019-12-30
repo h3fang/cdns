@@ -10,11 +10,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-static const char *DNS_V4 = "119.29.29.29";
-// static const char *DNS_V4 = "202.120.2.101";
+static const char *DNS_V4 = "114.114.114.114";
 static const char *DNS_V6 = "2001:4860:4860::8844";
-
-static int sfd = -1;
+static const int DNS_PORT = 53;
+static int relay_socket = -1;
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
   memset(addr, 0, sizeof(*addr));
@@ -145,7 +144,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in6 addr;
-        uv_ip6_addr(DNS_V6, 53, &addr);
+        uv_ip6_addr(DNS_V6, DNS_PORT, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
@@ -161,7 +160,7 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         }
 
         struct sockaddr_in addr;
-        uv_ip4_addr(DNS_V4, 53, &addr);
+        uv_ip4_addr(DNS_V4, DNS_PORT, &addr);
 
         if (sendto(s, data_ptr, data_size, 0, (struct sockaddr *)&addr, sizeof(addr)) != data_size) {
             close(s);
@@ -179,17 +178,16 @@ bool resolve(char* data_ptr, int data_size, const sockaddr_in6 client_addr, sock
         return false;
     }
 
-    sendto(sfd, data_ptr, data_size, 0, (struct sockaddr *)&client_addr, addr_length);
+    sendto(relay_socket, data_ptr, data_size, 0, (struct sockaddr *)&client_addr, addr_length);
 
     return true;
 }
 
 int main(int argc, char **argv)
 {
-    int c;
-    int port = 53; // local DNS port
+    int c = 0;
 
-    while ((c = getopt(argc, argv, "4:6:p:")) != -1) {
+    while ((c = getopt(argc, argv, "4:6:")) != -1) {
         switch (c) {
         case '4':
             DNS_V4 = optarg;
@@ -197,24 +195,21 @@ int main(int argc, char **argv)
         case '6':
             DNS_V6 = optarg;
             break;
-        case 'p':
-            port = strtol(optarg, nullptr, 10);
-            break;
         default:
             return 1;
         }
     }
 
-    sfd = socket(AF_INET6, SOCK_DGRAM, 0);
-    if(sfd < 0) {
+    relay_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+    if(relay_socket < 0) {
         std::cerr << "Failed to create socket\n";
         return 1;
     }
 
     struct sockaddr_in6 addr;
-    uv_ip6_addr("::1", 53, &addr);
+    uv_ip6_addr("::1", DNS_PORT, &addr);
 
-    if(bind(sfd, (struct sockaddr *)&addr, sizeof(addr))<0) {
+    if(bind(relay_socket, (struct sockaddr *)&addr, sizeof(addr))<0) {
         std::cerr << "Failed to bind\n";
         return 2;
     }
@@ -227,7 +222,7 @@ int main(int argc, char **argv)
 
         bzero(&client_addr, addr_length);
 
-        data_size = recvfrom(sfd, data_ptr, 2048, 0, (struct sockaddr *)&client_addr, &addr_length);
+        data_size = recvfrom(relay_socket, data_ptr, 2048, 0, (struct sockaddr *)&client_addr, &addr_length);
 
         std::thread(resolve, data_ptr, data_size, client_addr, addr_length).detach();
     }
