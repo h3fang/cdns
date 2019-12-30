@@ -95,7 +95,7 @@ std::string get_hostname_form_sequence(const char *s) {
     return r;
 }
 
-bool resolve(std::shared_ptr<char[]>&& ptr, int data_size, const sockaddr_in6 client_addr, socklen_t addr_length) {
+bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 client_addr, socklen_t addr_length) {
     if (data_size < 12) {
         std::cerr << "Invalid datagram size: " << data_size << std::endl;
         return false;
