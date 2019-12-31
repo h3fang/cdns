@@ -142,7 +142,6 @@ bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 clie
     if (query_type == 28) { // AAAA
         s = create_udp_socket(AF_INET6);
         if (s < 0) {
-            std::cerr << "Failed to create and bind socket on ::1\n";
             return false;
         }
 
@@ -158,7 +157,6 @@ bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 clie
     else {
         s = create_udp_socket(AF_INET);
         if (s < 0) {
-            std::cerr << "Failed to create and bind socket on 127.0.0.1\n";
             return false;
         }
 
