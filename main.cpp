@@ -73,7 +73,7 @@ int create_udp_socket(int type) {
     return s;
 }
 
-std::string get_hostname_form_sequence(const char *s) {
+std::string get_hostname_from_sequence(const char *s) {
     std::string r;
     r.reserve(128);
 
@@ -120,7 +120,7 @@ bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 clie
         std::cerr << num_of_questions << " questions in header section\n";
     }
 
-    auto hostname = get_hostname_form_sequence(data_ptr+12);
+    auto hostname = get_hostname_from_sequence(data_ptr+12);
 //    std::cout << hostname << std::endl;
 
     if (int(hostname.size()+1 + 12 + 4) > data_size) {
