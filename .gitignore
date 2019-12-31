@@ -1,6 +1,2 @@
-*.pro.user
-*.o
-*.d
-CMakeLists.txt.user
-cdns
+.vscode/
 build/
