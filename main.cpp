@@ -95,17 +95,11 @@ std::string get_hostname_from_sequence(const char *s) {
     return r;
 }
 
-bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 client_addr, socklen_t addr_length) {
+bool resolve(char *data_ptr, int data_size, const sockaddr * client_addr, socklen_t addr_length) {
+    std::unique_ptr<char[]> ptr(data_ptr);
+
     if (data_size < 12) {
         std::cerr << "Invalid datagram size: " << data_size << std::endl;
-        return false;
-    }
-
-    char* data_ptr = ptr.get();
-
-    // check for QR bit, should be 0 (query)
-    if ((*(data_ptr+2) & 0b10000000) != 0) {
-        std::cerr << "Invalid QR bit: " << *(data_ptr+2) << "\n";
         return false;
     }
 
@@ -121,17 +115,9 @@ bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 clie
     }
 
     auto hostname = get_hostname_from_sequence(data_ptr+12);
-//    std::cout << hostname << std::endl;
 
     if (int(hostname.size()+1 + 12 + 4) > data_size) {
         std::cerr << "Invalid hostname size: " << hostname << std::endl;
-        return false;
-    }
-
-    uint16_t query_class = ntohs(*(uint16_t*)(data_ptr+12+hostname.size()+1+2));
-
-    if (query_class != 1) {
-        std::cerr << "Invalid query class: " << query_class << std::endl;
         return false;
     }
 
@@ -180,17 +166,22 @@ bool resolve(std::shared_ptr<char[]> ptr, int data_size, const sockaddr_in6 clie
     }
 
     relay_socket_mtx.lock();
-    sendto(relay_socket, data_ptr, data_size, 0, (struct sockaddr *)&client_addr, addr_length);
+    int sent = sendto(relay_socket, data_ptr, data_size, 0, client_addr, addr_length);
     relay_socket_mtx.unlock();
+
+    if (sent != data_size) {
+        fprintf(stderr, "Failed to send response\n");
+        return false;
+    }
 
     return true;
 }
 
 int main(int argc, char **argv)
 {
-    int c = 0;
+    int c = 0, local_port = DNS_PORT;
 
-    while ((c = getopt(argc, argv, "4:6:")) != -1) {
+    while ((c = getopt(argc, argv, "4:6:p:")) != -1) {
         switch (c) {
         case '4':
             DNS_V4 = optarg;
@@ -198,35 +189,36 @@ int main(int argc, char **argv)
         case '6':
             DNS_V6 = optarg;
             break;
+        case 'p':
+            local_port = strtol(optarg, nullptr, 10);
+            break;
         default:
             return 1;
         }
     }
 
-    relay_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+    relay_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if(relay_socket < 0) {
-        std::cerr << "Failed to create socket\n";
+        fprintf(stderr, "Failed to create socket\n");
         return 1;
     }
 
-    struct sockaddr_in6 addr;
-    uv_ip6_addr("::1", DNS_PORT, &addr);
+    sockaddr_in addr;
+    uv_ip4_addr("127.0.0.1", local_port, &addr);
 
-    if(bind(relay_socket, (struct sockaddr *)&addr, sizeof(addr))<0) {
+    if(bind(relay_socket, (sockaddr *)&addr, sizeof(addr))<0) {
         std::cerr << "Failed to bind\n";
         return 2;
     }
 
     while (true) {
-        auto relay_buffer = std::make_shared<char[]>(relay_buffer_size);
-        sockaddr_in6 client_addr;
+        char *relay_buffer = new char[relay_buffer_size];
+        sockaddr_in *client_addr = new sockaddr_in;
         socklen_t addr_length = sizeof(client_addr);
 
-        bzero(&client_addr, addr_length);
+        int data_size = recvfrom(relay_socket, relay_buffer, relay_buffer_size, 0, (sockaddr *)client_addr, &addr_length);
 
-        int data_size = recvfrom(relay_socket, relay_buffer.get(), relay_buffer_size, 0, (struct sockaddr *)&client_addr, &addr_length);
-
-        std::thread(resolve, relay_buffer, data_size, client_addr, addr_length).detach();
+        std::thread(resolve, relay_buffer, data_size, (sockaddr *)client_addr, addr_length).detach();
     }
 
     return 0;
