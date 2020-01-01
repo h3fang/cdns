@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 3.0)
 project (cdns)
-set(CMAKE_BUILD_TYPE Release)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 # find libuv
 find_path(LIBUV_INCLUDE_DIRS uv.h)
