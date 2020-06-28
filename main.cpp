@@ -1,10 +1,11 @@
-#include <cstring>
-#include <cstdlib>
-#include <cstdio>
-#include <map>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include <unistd.h>
 #include <uv.h>
+
+#include <unordered_map>
 
 static const char *DNS_V4 = "114.114.114.114";
 static const char *DNS_V6 = "2001:4860:4860::8844";
@@ -15,7 +16,7 @@ uv_udp_t relay_socket, query_v4, query_v6;
 sockaddr_in server_v4, any_v4, local_v4;
 sockaddr_in6 server_v6, any_v6;
 
-std::map<uint16_t, sockaddr> query_map;
+std::unordered_map<uint16_t, sockaddr> query_map;
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
     buf->base = (char *)malloc(suggested_size);
