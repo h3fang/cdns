@@ -14,7 +14,7 @@ endif()
 
 # build
 add_executable(cdns main.cpp)
-set_property(TARGET cdns PROPERTY CXX_STANDARD 17)
+set_property(TARGET cdns PROPERTY CXX_STANDARD 11)
 target_include_directories(cdns PRIVATE ${LIBUV_INCLUDE_DIRS})
 target_link_libraries (cdns ${LibUV_LIBRARIES})
 

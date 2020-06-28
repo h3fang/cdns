@@ -1,4 +1,5 @@
 #include <cstring>
+#include <cstdlib>
 #include <cstdio>
 #include <map>
 
