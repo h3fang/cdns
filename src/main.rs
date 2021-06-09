@@ -72,63 +72,55 @@ async fn main() -> io::Result<()> {
 
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
-        let bytes = buf[..len].to_vec();
 
-        let sock = sock.clone();
-        let cache = cache.clone();
-        let upstreams = upstreams.clone();
-        let client = client.clone();
+        let mut msg;
+        match op::Message::from_vec(&buf[..len]) {
+            Ok(m) => msg = m,
+            Err(e) => {
+                error!("Failed to decode DNS message, error: {}", e);
+                continue;
+            }
+        }
 
-        tokio::spawn(async move {
-            let mut msg;
-            match op::Message::from_vec(&bytes) {
-                Ok(m) => msg = m,
-                Err(e) => {
-                    error!("Failed to decode DNS message, error: {}", e);
-                    return;
+        // get the only query in DNS message
+        let n = msg.queries().iter().count();
+        if n != 1 {
+            warn!("{} question(s) found in DNS query datagram.", n);
+            msg.set_message_type(op::MessageType::Response);
+            msg.set_response_code(op::ResponseCode::FormErr);
+            respond(&msg, &sock, &addr).await;
+            continue;
+        }
+        let q = msg.queries()[0].to_owned();
+
+        info!("query {}", q);
+
+        // try to get response from cache
+        {
+            let mut cache = cache.lock().await;
+            match cache.get(&q, &msg) {
+                Some(rsp) => {
+                    respond(rsp, &sock, &addr).await;
+                    continue;
+                }
+                None => {
+                    cache.pop(&q);
                 }
             }
+        }
 
-            // get the only query in DNS message
-            let n = msg.queries().iter().count();
-            if n != 1 {
-                warn!("{} question(s) found in DNS query datagram.", n);
+        // resolve from multiple DNS servers
+        match resolve(&upstreams, &client, &q, &msg).await {
+            Ok(rsp) => {
+                respond(&rsp, &sock, &addr).await;
+                cache.lock().await.put(q, rsp);
+            }
+            Err(e) => {
+                error!("Failed to resolve for {}, error: {:?}", q, e);
                 msg.set_message_type(op::MessageType::Response);
                 msg.set_response_code(op::ResponseCode::FormErr);
                 respond(&msg, &sock, &addr).await;
-                return;
             }
-            let q = msg.queries()[0].to_owned();
-
-            info!("query {}", q);
-
-            // try to get response from cache
-            {
-                let mut cache = cache.lock().await;
-                match cache.get(&q, &msg) {
-                    Some(rsp) => {
-                        respond(rsp, &sock, &addr).await;
-                        return;
-                    }
-                    None => {
-                        cache.pop(&q);
-                    }
-                }
-            }
-
-            // resolve from multiple DNS servers
-            match resolve(&upstreams, &client, &q, &msg).await {
-                Ok(rsp) => {
-                    respond(&rsp, &sock, &addr).await;
-                    cache.lock().await.put(q, rsp);
-                }
-                Err(e) => {
-                    error!("Failed to resolve for {}, error: {:?}", q, e);
-                    msg.set_message_type(op::MessageType::Response);
-                    msg.set_response_code(op::ResponseCode::FormErr);
-                    respond(&msg, &sock, &addr).await;
-                }
-            }
-        });
+        }
     }
 }
