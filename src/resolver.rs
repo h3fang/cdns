@@ -139,9 +139,8 @@ mod tests {
     use super::*;
     use trust_dns_proto::rr;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn resolve_baidu() {
-        let name = rr::Name::from_ascii("www.baidu.com.").unwrap();
+    async fn resolve_domain(domain: &str, upstreams: &[Upstream], client: &reqwest::Client) {
+        let name = rr::Name::from_ascii(domain).unwrap();
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
         let mut msg = op::Message::new();
         msg.set_id(rand::random::<u16>());
@@ -149,12 +148,29 @@ mod tests {
         msg.set_message_type(op::MessageType::Query);
         msg.set_recursion_desired(true);
 
-        let upstreams = Upstream::defaults();
-        let client = reqwest::Client::new();
         let r = resolve(&upstreams, &client, &q, &msg).await.unwrap();
 
         assert_eq!(q, r.queries()[0]);
         assert_eq!(name, *r.answers()[0].name());
     }
 
+    async fn resolv_domains() {
+        let upstreams = Upstream::defaults();
+        let client = reqwest::Client::new();
+
+        let domains = vec!["www.baidu.com.", "github.com.", "www.google.com."];
+        for d in &domains {
+            resolve_domain(d, &upstreams, &client).await;
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn resolve_domains_current_thread() {
+        resolv_domains().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_domains_multi_thread() {
+        resolv_domains().await;
+    }
 }
