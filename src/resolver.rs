@@ -34,7 +34,7 @@ impl From<ProtoError> for ResolveError {
 
 impl Upstream {
     pub fn new(url: &str, ips: &[IpAddr]) -> Upstream {
-        let u = Url::parse(url).unwrap();
+        let u = Url::parse(url).expect(format!("Invalid upstream URL {}", url));
         Upstream {
             url: url.to_string(),
             domain: u.domain().unwrap_or("").to_lowercase() + ".",
@@ -140,7 +140,7 @@ mod tests {
     use trust_dns_proto::rr;
 
     async fn resolve_domain(domain: &str, upstreams: &[Upstream], client: &reqwest::Client) {
-        let name = rr::Name::from_ascii(domain).unwrap();
+        let name = rr::Name::from_ascii(domain).expect("Invalid domain name.");
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
         let mut msg = op::Message::new();
         msg.set_id(rand::random::<u16>());
@@ -148,13 +148,15 @@ mod tests {
         msg.set_message_type(op::MessageType::Query);
         msg.set_recursion_desired(true);
 
-        let r = resolve(&upstreams, &client, &q, &msg).await.unwrap();
+        let r = resolve(&upstreams, &client, &q, &msg)
+            .await
+            .expect("Failed to resolve.");
 
         assert_eq!(q, r.queries()[0]);
         assert_eq!(name, *r.answers()[0].name());
     }
 
-    async fn resolv_domains() {
+    async fn resolve_domains() {
         let upstreams = Upstream::defaults();
         let client = reqwest::Client::new();
 
@@ -166,11 +168,11 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn resolve_domains_current_thread() {
-        resolv_domains().await;
+        resolve_domains().await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn resolve_domains_multi_thread() {
-        resolv_domains().await;
+        resolve_domains().await;
     }
 }
