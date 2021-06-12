@@ -9,15 +9,15 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-env_logger = "0.8.3"
+env_logger = "0.8"
 lru = "0.6"
-trust-dns-proto = "0.20.3"
+trust-dns-proto = "0.20"
 reqwest = "0.11"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "macros", "time"] }
 futures = "0.3"
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = "0.8"
 
 [profile.release]
 lto = true
