@@ -34,7 +34,7 @@ impl From<ProtoError> for ResolveError {
 
 impl Upstream {
     pub fn new(url: &str, ips: &[IpAddr]) -> Upstream {
-        let u = Url::parse(url).expect(&format!("Invalid upstream URL {}", url));
+        let u = Url::parse(url).unwrap_or_else(|_| panic!("Invalid upstream URL {}", url));
         Upstream {
             url: url.to_string(),
             domain: u.domain().unwrap_or("").to_lowercase() + ".",

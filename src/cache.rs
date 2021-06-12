@@ -80,10 +80,9 @@ impl DNSCache {
     pub fn bootstrap(&mut self, resolvers: &[Upstream]) {
         resolvers.iter().for_each(|x| {
             if !x.ips.is_empty() {
-                let name = rr::Name::from_utf8(&x.domain).expect(&format!(
-                    "Invalid domain name {}, should never happen!",
-                    x.domain
-                ));
+                let name = rr::Name::from_utf8(&x.domain).unwrap_or_else(|_| {
+                    panic!("Invalid domain name {}, should never happen!", x.domain)
+                });
                 let v4: Vec<_> = x
                     .ips
                     .iter()
@@ -204,7 +203,8 @@ mod tests {
                 .map(char::from)
                 .collect::<String>()
                 + ".com.";
-            let name = rr::Name::from_ascii(&name).expect(&format!("Invalid domain name {}", name));
+            let name = rr::Name::from_ascii(&name)
+                .unwrap_or_else(|_| panic!("Invalid domain name {}", name));
             let mut msg = op::Message::new();
             let type_a = rand::random::<bool>();
             for _ in 1..(rand::thread_rng().gen_range(1..5)) {
@@ -241,7 +241,7 @@ mod tests {
                 msg,
             );
         }
-        assert_eq!(cache.len() > 0, true);
+        assert!(!cache.is_empty());
         assert_eq!(cache.len() <= n, true);
     }
 }
