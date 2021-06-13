@@ -1,4 +1,4 @@
-use crate::resolver::Upstream;
+use crate::upstream::Upstream;
 use log::info;
 use lru::LruCache;
 use std::net::IpAddr;
@@ -77,12 +77,11 @@ impl DNSCache {
         self.cache.len()
     }
 
-    pub fn bootstrap(&mut self, resolvers: &[Upstream]) {
-        resolvers.iter().for_each(|x| {
+    pub fn bootstrap(&mut self, upstreams: &[Upstream]) {
+        upstreams.iter().for_each(|x| {
             if !x.ips.is_empty() {
-                let name = rr::Name::from_utf8(&x.domain).unwrap_or_else(|_| {
-                    panic!("Invalid domain name {}, should never happen!", x.domain)
-                });
+                let name = rr::Name::from_utf8(&x.domain)
+                    .unwrap_or_else(|_| panic!("Invalid domain name {}", x.domain));
                 let v4: Vec<_> = x
                     .ips
                     .iter()
@@ -137,8 +136,16 @@ impl DNSCache {
             }
         });
 
-        if self.is_empty() {
-            panic!("Failed to bootstrap upstream servers, at least one server with IP addresses should be specified.");
+        let has_ip_host = upstreams.iter().any(|ups| {
+            let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {}", e));
+            match u.host() {
+                Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_)) => true,
+                _ => false,
+            }
+        });
+
+        if !has_ip_host && self.is_empty() {
+            panic!("Failed to bootstrap upstream servers, at least one upstream with IP addresses should be specified.");
         }
     }
 

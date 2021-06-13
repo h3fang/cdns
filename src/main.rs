@@ -1,10 +1,10 @@
 mod cache;
 mod resolver;
+mod upstream;
 
-use cache::DNSCache;
+use crate::cache::DNSCache;
+use crate::resolver::Resolver;
 use log::{error, info, warn};
-use reqwest::header::{HeaderMap, HeaderValue};
-use resolver::{resolve, Upstream};
 use std::{io, net::SocketAddr, sync::Arc};
 use tokio::{net::UdpSocket, sync::Mutex};
 use trust_dns_proto::op;
@@ -23,7 +23,7 @@ async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> io::Result<()> {
     let env = env_logger::Env::default().default_filter_or("info");
     env_logger::Builder::from_env(env)
@@ -32,36 +32,16 @@ async fn main() -> io::Result<()> {
 
     let sock = Arc::new(UdpSocket::bind("127.0.0.1:53").await?);
 
-    let upstreams = Arc::new(Upstream::defaults());
+    let resolver = Arc::new(Resolver::new());
 
-    let mut cache = DNSCache::new(4096);
-    cache.bootstrap(&upstreams);
+    let mut cache = DNSCache::new(2048);
+    cache.bootstrap(&resolver.upstreams);
     let cache = Arc::new(Mutex::new(cache));
 
-    let mut buf = vec![0u8; 2048];
-
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "accept",
-        HeaderValue::from_static("application/dns-message"),
-    );
-    headers.insert(
-        "content-type",
-        HeaderValue::from_static("application/dns-message"),
-    );
-
-    let client = Arc::new(
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .connect_timeout(std::time::Duration::from_secs(1))
-            .timeout(std::time::Duration::from_secs(3))
-            .pool_max_idle_per_host(128)
-            .https_only(true)
-            .build()
-            .expect("Failed to create reqwest::Client."),
-    );
+    let mut buf = vec![0u8; 1024];
 
     let cache_clone = cache.clone();
+
     tokio::spawn(async move {
         let mut expire_timer = tokio::time::interval(tokio::time::Duration::from_secs(10));
         loop {
@@ -76,20 +56,18 @@ async fn main() -> io::Result<()> {
 
         let sock = sock.clone();
         let cache = cache.clone();
-        let upstreams = upstreams.clone();
-        let client = client.clone();
+        let resolver = resolver.clone();
 
         tokio::spawn(async move {
-            let mut msg;
-            match op::Message::from_vec(&bytes) {
-                Ok(m) => msg = m,
+            let mut msg = match op::Message::from_vec(&bytes) {
+                Ok(m) => m,
                 Err(e) => {
                     error!("Failed to decode DNS message, error: {}", e);
                     return;
                 }
-            }
+            };
 
-            // get the only query in DNS message
+            // ensure there is one and only one query in DNS message
             let n = msg.queries().iter().count();
             if n != 1 {
                 warn!("{} question(s) found in DNS query datagram.", n);
@@ -117,7 +95,7 @@ async fn main() -> io::Result<()> {
             }
 
             // resolve from multiple DNS servers
-            match resolve(&upstreams, &client, &q, &msg).await {
+            match resolver.resolve(&q, &msg).await {
                 Ok(rsp) => {
                     respond(&rsp, &sock, &addr).await;
                     cache.lock().await.put(q, rsp);

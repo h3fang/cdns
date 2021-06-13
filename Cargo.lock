@@ -85,6 +85,7 @@ dependencies = [
  "reqwest",
  "tokio",
  "trust-dns-proto",
+ "url",
 ]
 
 [[package]]
