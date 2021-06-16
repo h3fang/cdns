@@ -138,10 +138,7 @@ impl DNSCache {
 
         let has_ip_host = upstreams.iter().any(|ups| {
             let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {}", e));
-            match u.host() {
-                Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_)) => true,
-                _ => false,
-            }
+            matches!(u.host(), Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_)))
         });
 
         if !has_ip_host && self.is_empty() {
