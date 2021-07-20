@@ -1,13 +1,11 @@
-use crate::upstream::Upstream;
 use log::info;
 use lru::LruCache;
-use std::net::IpAddr;
 use std::time::Instant;
-use trust_dns_proto::{op, rr};
+use trust_dns_proto::op;
 
-pub struct DNSEntry {
-    pub time: Instant,
-    pub response: op::Message,
+struct DNSEntry {
+    timestamp: Instant,
+    response: op::Message,
 }
 
 /// LRU DNS cache
@@ -31,7 +29,7 @@ impl DNSCache {
                     .map(|a| a.ttl())
                     .min()
                     .unwrap_or(0) as i64;
-                let remaining = ttl - entry.time.elapsed().as_secs() as i64;
+                let remaining = ttl - entry.timestamp.elapsed().as_secs() as i64;
                 if remaining >= 0 {
                     entry.response.set_id(msg.id());
                     if let Some(edns) = msg.edns() {
@@ -57,7 +55,7 @@ impl DNSCache {
         self.cache.put(
             q,
             DNSEntry {
-                time: Instant::now(),
+                timestamp: Instant::now(),
                 response: rsp,
             },
         );
@@ -69,108 +67,8 @@ impl DNSCache {
         info!("cache size: {}", self.len());
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.cache.is_empty()
-    }
-
     pub fn len(&self) -> usize {
         self.cache.len()
-    }
-
-    pub fn bootstrap(&mut self, upstreams: &[Upstream]) {
-        upstreams.iter().for_each(|x| {
-            if !x.ips.is_empty() {
-                let name = rr::Name::from_utf8(&x.domain)
-                    .unwrap_or_else(|_| panic!("Invalid domain name {}", x.domain));
-                let v4: Vec<_> = x
-                    .ips
-                    .iter()
-                    .filter_map(|&ip| match ip {
-                        IpAddr::V4(addr) => Some(addr),
-                        _ => None,
-                    })
-                    .collect();
-                if !v4.is_empty() {
-                    let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::A);
-                    let mut msg = op::Message::new();
-                    msg.add_query(q.to_owned());
-                    v4.iter().for_each(|&ip| {
-                        msg.add_answer(rr::Record::from_rdata(
-                            name.to_owned(),
-                            std::u32::MAX,
-                            rr::RData::A(ip),
-                        ));
-                    });
-                    msg.set_message_type(op::MessageType::Response);
-                    msg.set_authoritative(true);
-                    msg.set_recursion_available(true);
-                    msg.set_response_code(op::ResponseCode::NoError);
-                    self.put(q, msg);
-                }
-
-                let v6: Vec<_> = x
-                    .ips
-                    .iter()
-                    .filter_map(|&ip| match ip {
-                        IpAddr::V6(addr) => Some(addr),
-                        _ => None,
-                    })
-                    .collect();
-                if !v6.is_empty() {
-                    let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::AAAA);
-                    let mut msg = op::Message::new();
-                    msg.add_query(q.to_owned());
-                    v6.iter().for_each(|&ip| {
-                        msg.add_answer(rr::Record::from_rdata(
-                            name.to_owned(),
-                            std::u32::MAX,
-                            rr::RData::AAAA(ip),
-                        ));
-                    });
-                    msg.set_message_type(op::MessageType::Response);
-                    msg.set_authoritative(true);
-                    msg.set_recursion_available(true);
-                    msg.set_response_code(op::ResponseCode::NoError);
-                    self.put(q, msg);
-                }
-            }
-        });
-
-        let has_ip_host = upstreams.iter().any(|ups| {
-            let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {}", e));
-            matches!(
-                u.host(),
-                Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_))
-            )
-        });
-
-        if !has_ip_host && self.is_empty() {
-            panic!("Failed to bootstrap upstream servers, at least one upstream with IP addresses should be specified.");
-        }
-    }
-
-    pub fn remove_expired(&mut self) {
-        let invalid: Vec<_> = self
-            .cache
-            .iter()
-            .filter_map(|(q, entry)| {
-                let ttl = entry
-                    .response
-                    .all_sections()
-                    .map(|a| a.ttl())
-                    .min()
-                    .unwrap_or(0) as i64;
-                let remaining = ttl - entry.time.elapsed().as_secs() as i64;
-                if remaining <= 0 {
-                    return Some(q.to_owned());
-                }
-                None
-            })
-            .collect();
-
-        for q in invalid {
-            self.cache.pop(&q);
-        }
     }
 }
 
@@ -182,59 +80,33 @@ mod tests {
     use trust_dns_proto::rr;
 
     #[test]
-    fn bootstrap_cache() {
-        let mut cache = DNSCache::new(4096);
-        let upstreams = Upstream::defaults();
-        cache.bootstrap(&upstreams);
-        let n = upstreams.iter().fold(0, |n, ups| {
-            let mut c = 0;
-            if ups.ips.iter().any(|ip| ip.is_ipv4()) {
-                c += 1;
-            }
-            if ups.ips.iter().any(|ip| ip.is_ipv6()) {
-                c += 1;
-            }
-            n + c
-        });
-        assert_eq!(n, cache.len());
-    }
-
-    #[test]
     fn populate_cache() {
         let n = 4096;
+        let mut rng = rand::thread_rng();
         let mut cache = DNSCache::new(n);
-        for _ in 0..n {
+        for i in 0..n {
             let name = rand::thread_rng()
                 .sample_iter(&Alphanumeric)
                 .take(16)
                 .map(char::from)
                 .collect::<String>()
-                + ".com.";
+                + format!("{}.com.", i).as_str();
             let name = rr::Name::from_ascii(&name)
                 .unwrap_or_else(|_| panic!("Invalid domain name {}", name));
             let mut msg = op::Message::new();
+            msg.set_message_type(op::MessageType::Response);
             let type_a = rand::random::<bool>();
-            for _ in 1..(rand::thread_rng().gen_range(1..5)) {
+            for _ in 0..(rng.gen_range(1..5)) {
                 let rdata = if type_a {
-                    rr::RData::A(Ipv4Addr::new(
-                        1,
-                        rand::random::<u8>(),
-                        rand::random::<u8>(),
-                        1,
-                    ))
+                    rr::RData::A(Ipv4Addr::from(rand::random::<u32>()))
                 } else {
-                    rr::RData::AAAA(Ipv6Addr::new(
-                        1,
-                        rand::random::<u16>(),
-                        rand::random::<u16>(),
-                        rand::random::<u16>(),
-                        0,
-                        0,
-                        rand::random::<u16>(),
-                        1,
-                    ))
+                    rr::RData::AAAA(Ipv6Addr::from(rand::random::<u128>()))
                 };
-                msg.add_answer(rr::Record::from_rdata(name.to_owned(), 600, rdata));
+                msg.add_answer(rr::Record::from_rdata(
+                    name.to_owned(),
+                    rand::random::<u32>(),
+                    rdata,
+                ));
             }
             cache.put(
                 op::Query::query(
@@ -248,7 +120,7 @@ mod tests {
                 msg,
             );
         }
-        assert!(!cache.is_empty());
-        assert_eq!(cache.len() <= n, true);
+
+        assert_eq!(cache.len(), n);
     }
 }

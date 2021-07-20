@@ -1,14 +1,20 @@
+use crate::cache::DNSCache;
 use crate::upstream::Upstream;
 use futures::{stream, StreamExt};
 use log::{info, trace};
 use reqwest::header::{HeaderMap, HeaderValue};
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::result::Result;
+use tokio::sync::Mutex;
 use trust_dns_proto::error::ProtoError;
-use trust_dns_proto::op;
+use trust_dns_proto::{op, rr};
 
 pub struct Resolver {
-    pub upstreams: Vec<Upstream>,
-    pub https_client: reqwest::Client,
+    upstreams: Vec<Upstream>,
+    https_client: reqwest::Client,
+    presets: HashMap<op::Query, op::Message>,
+    cache: Mutex<DNSCache>,
 }
 
 #[derive(Debug)]
@@ -32,7 +38,7 @@ impl From<ProtoError> for ResolveError {
 }
 
 impl Resolver {
-    pub fn new() -> Resolver {
+    pub fn new(cache_size: usize) -> Resolver {
         let mut headers = HeaderMap::new();
         headers.insert(
             "accept",
@@ -52,9 +58,13 @@ impl Resolver {
             .build()
             .expect("Failed to create reqwest::Client.");
 
+        let upstreams = Upstream::defaults();
+
         Resolver {
-            upstreams: Upstream::defaults(),
+            presets: bootstrap(&upstreams),
+            upstreams,
             https_client: client,
+            cache: Mutex::new(DNSCache::new(cache_size)),
         }
     }
 
@@ -86,6 +96,23 @@ impl Resolver {
         q: &op::Query,
         msg: &op::Message,
     ) -> Result<op::Message, ResolveError> {
+        if let Some(msg) = self.presets.get(q) {
+            return Ok(msg.to_owned());
+        }
+
+        // try to get response from cache
+        {
+            let mut cache = self.cache.lock().await;
+            match cache.get(q, msg) {
+                Some(rsp) => {
+                    return Ok(rsp.to_owned());
+                }
+                None => {
+                    cache.pop(q);
+                }
+            }
+        }
+
         let domain = q.name().to_utf8().to_lowercase();
         let recursive = self.upstreams.iter().any(|ups| ups.domain == domain);
         let results: Vec<_> = self
@@ -104,11 +131,87 @@ impl Resolver {
             .pop()
         {
             info!("Fastest response from {}", url);
+            self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
             return Ok(rsp);
         }
 
         Err(ResolveError::AllFailed)
     }
+}
+
+fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
+    let mut presets = HashMap::new();
+    upstreams.iter().for_each(|x| {
+        if !x.ips.is_empty() {
+            let name = rr::Name::from_utf8(&x.domain)
+                .unwrap_or_else(|_| panic!("Invalid domain name {}", x.domain));
+            let v4: Vec<_> = x
+                .ips
+                .iter()
+                .filter_map(|&ip| match ip {
+                    IpAddr::V4(addr) => Some(addr),
+                    _ => None,
+                })
+                .collect();
+            if !v4.is_empty() {
+                let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::A);
+                let mut msg = op::Message::new();
+                msg.set_message_type(op::MessageType::Response)
+                    .set_authoritative(true)
+                    .set_recursion_available(true)
+                    .set_response_code(op::ResponseCode::NoError)
+                    .add_query(q.to_owned());
+                v4.iter().for_each(|&ip| {
+                    msg.add_answer(rr::Record::from_rdata(
+                        name.to_owned(),
+                        std::u32::MAX,
+                        rr::RData::A(ip),
+                    ));
+                });
+                presets.insert(q, msg);
+            }
+
+            let v6: Vec<_> = x
+                .ips
+                .iter()
+                .filter_map(|&ip| match ip {
+                    IpAddr::V6(addr) => Some(addr),
+                    _ => None,
+                })
+                .collect();
+            if !v6.is_empty() {
+                let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::AAAA);
+                let mut msg = op::Message::new();
+                msg.set_message_type(op::MessageType::Response)
+                    .set_authoritative(true)
+                    .set_recursion_available(true)
+                    .set_response_code(op::ResponseCode::NoError)
+                    .add_query(q.to_owned());
+                v6.iter().for_each(|&ip| {
+                    msg.add_answer(rr::Record::from_rdata(
+                        name.to_owned(),
+                        std::u32::MAX,
+                        rr::RData::AAAA(ip),
+                    ));
+                });
+                presets.insert(q, msg);
+            }
+        }
+    });
+
+    let has_ip_host = upstreams.iter().any(|ups| {
+        let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {}", e));
+        matches!(
+            u.host(),
+            Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_))
+        )
+    });
+
+    if !has_ip_host && presets.is_empty() {
+        panic!("Failed to bootstrap upstream servers, at least one upstream with IP addresses should be specified.");
+    }
+
+    presets
 }
 
 #[cfg(test)]
@@ -120,10 +223,10 @@ mod tests {
         let name = rr::Name::from_ascii(domain).expect("Invalid domain name.");
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
         let mut msg = op::Message::new();
-        msg.set_id(rand::random::<u16>());
-        msg.add_query(q.to_owned());
-        msg.set_message_type(op::MessageType::Query);
-        msg.set_recursion_desired(true);
+        msg.set_id(rand::random::<u16>())
+            .add_query(q.to_owned())
+            .set_message_type(op::MessageType::Query)
+            .set_recursion_desired(true);
 
         let r = resolver
             .resolve(&q, &msg)
@@ -135,7 +238,7 @@ mod tests {
     }
 
     async fn resolve_domains() {
-        let resolver = Resolver::new();
+        let resolver = Resolver::new(2048);
 
         let domains = vec!["www.baidu.com.", "github.com.", "www.google.com."];
         for d in &domains {
