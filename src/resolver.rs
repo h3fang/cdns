@@ -122,17 +122,14 @@ impl Resolver {
             .map(|ups| async move { self.resolve_with_doh(&ups.url, q, msg).await })
             .collect();
 
-        if let Some((url, rsp)) = stream::iter(results)
-            .buffer_unordered(32)
-            .filter_map(|r| async { r.ok() })
-            .take(1)
-            .collect::<Vec<_>>()
-            .await
-            .pop()
-        {
-            info!("Fastest response from {}", url);
-            self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
-            return Ok(rsp);
+        let mut buffered = stream::iter(results).buffer_unordered(32);
+
+        while let Some(r) = buffered.next().await {
+            if let Ok((url, rsp)) = r {
+                info!("Fastest response from {}", url);
+                self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
+                return Ok(rsp);
+            }
         }
 
         Err(ResolveError::AllFailed)
