@@ -214,9 +214,10 @@ fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::future::join_all;
     use trust_dns_proto::rr;
 
-    async fn resolve_domain(domain: String, resolver: &Resolver) {
+    async fn resolve_domain(domain: &str, resolver: &Resolver) {
         let name = rr::Name::from_ascii(domain).expect("Invalid domain name.");
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
         let mut msg = op::Message::new();
@@ -235,7 +236,7 @@ mod tests {
     }
 
     async fn resolve_domains() {
-        let resolver = std::sync::Arc::new(Resolver::new(2048));
+        let resolver = Resolver::new(2048);
 
         // Alexa Top 10
         let domains = vec![
@@ -251,10 +252,7 @@ mod tests {
             "jd.com",
         ];
 
-        for d in domains {
-            let r = resolver.clone();
-            tokio::spawn(async move { resolve_domain(d.to_string(), &r).await });
-        }
+        join_all(domains.into_iter().map(|d| resolve_domain(d, &resolver))).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
