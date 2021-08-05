@@ -3,7 +3,7 @@ mod resolver;
 mod upstream;
 
 use crate::resolver::Resolver;
-use log::{error, info, warn};
+use log::{error, info};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::UdpSocket;
 use trust_dns_proto::op;
@@ -50,38 +50,9 @@ async fn main() {
         let resolver = resolver.clone();
 
         tokio::spawn(async move {
-            let mut msg = match op::Message::from_vec(&bytes) {
-                Ok(m) => m,
-                Err(e) => {
-                    error!("Failed to decode DNS message. Error: {}", e);
-                    return;
-                }
-            };
-
-            // ensure there is one and only one query in DNS message
-            let n = msg.queries().iter().count();
-            if n != 1 {
-                warn!("{} question(s) found in DNS query datagram.", n);
-                msg.set_message_type(op::MessageType::Response)
-                    .set_response_code(op::ResponseCode::FormErr);
-                respond(&msg, &sock, &addr).await;
-                return;
-            }
-            let q = msg.queries()[0].to_owned();
-
-            info!("query {}", q);
-
-            // resolve from multiple DNS servers
-            match resolver.resolve(&q, &msg).await {
-                Ok(rsp) => {
-                    respond(&rsp, &sock, &addr).await;
-                }
-                Err(e) => {
-                    error!("Failed to resolve for {}, error: {:?}", q, e);
-                    msg.set_message_type(op::MessageType::Response)
-                        .set_response_code(op::ResponseCode::FormErr);
-                    respond(&msg, &sock, &addr).await;
-                }
+            match resolver.handle_packet(bytes).await {
+                Ok(rsp) => respond(&rsp, &sock, &addr).await,
+                Err(e) => error!("{:?}", e),
             }
         });
     }

@@ -1,7 +1,7 @@
 use crate::cache::DNSCache;
 use crate::upstream::Upstream;
 use futures::{stream, StreamExt};
-use log::{info, trace};
+use log::{error, info, trace, warn};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -133,6 +133,33 @@ impl Resolver {
         }
 
         Err(ResolveError::AllFailed)
+    }
+
+    pub async fn handle_packet(&self, bytes: Vec<u8>) -> Result<op::Message, ResolveError> {
+        let mut msg = op::Message::from_vec(&bytes)?;
+
+        // ensure there is one and only one query in DNS message
+        let n = msg.queries().iter().count();
+        if n != 1 {
+            warn!("{} question(s) found in DNS query datagram.", n);
+            msg.set_message_type(op::MessageType::Response)
+                .set_response_code(op::ResponseCode::FormErr);
+            return Ok(msg);
+        }
+        let q = msg.queries()[0].to_owned();
+
+        info!("query {}", q);
+
+        // resolve from multiple DNS servers
+        match self.resolve(&q, &msg).await {
+            Ok(rsp) => Ok(rsp),
+            Err(e) => {
+                error!("Failed to resolve for {}, error: {:?}", q, e);
+                msg.set_message_type(op::MessageType::Response)
+                    .set_response_code(op::ResponseCode::FormErr);
+                Ok(msg)
+            }
+        }
     }
 }
 
