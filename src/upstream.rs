@@ -20,7 +20,7 @@ impl Upstream {
         vec![
             Upstream::new("https://dns.rubyfish.cn/dns-query", &[]),
             Upstream::new("https://doh.pub/dns-query", &[]),
-            Upstream::new("https://101.6.6.6:8443/dns-query", &[]),
+            // Upstream::new("https://101.6.6.6:8443/dns-query", &[]),
             Upstream::new(
                 "https://dns.alidns.com/dns-query",
                 &[
@@ -68,6 +68,6 @@ mod tests {
     #[test]
     fn default_upstreams() {
         let ups = Upstream::defaults();
-        assert_eq!(ups.len(), 5);
+        assert_eq!(ups.len() > 0, true);
     }
 }
