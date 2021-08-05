@@ -96,8 +96,13 @@ impl Resolver {
         q: &op::Query,
         msg: &op::Message,
     ) -> Result<op::Message, ResolveError> {
-        if let Some(msg) = self.presets.get(q) {
-            return Ok(msg.to_owned());
+        if let Some(rsp) = self.presets.get(q) {
+            let mut rsp = rsp.to_owned();
+            rsp.set_id(msg.id());
+            if let Some(edns) = msg.edns() {
+                rsp.set_edns(edns.to_owned());
+            }
+            return Ok(rsp);
         }
 
         // try to get response from cache
@@ -263,6 +268,7 @@ mod tests {
             .expect("Failed to resolve.");
 
         assert_eq!(q, r.queries()[0]);
+        println!("{:?}", r.answers());
         assert_eq!(name, *r.answers()[0].name());
     }
 
