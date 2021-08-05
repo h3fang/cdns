@@ -103,9 +103,13 @@ impl Resolver {
         // try to get response from cache
         {
             let mut cache = self.cache.lock().await;
-            match cache.get(q, msg) {
-                Some(rsp) => {
-                    return Ok(rsp.to_owned());
+            match cache.get(q) {
+                Some(mut rsp) => {
+                    rsp.set_id(msg.id());
+                    if let Some(edns) = msg.edns() {
+                        rsp.set_edns(edns.to_owned());
+                    }
+                    return Ok(rsp);
                 }
                 None => {
                     cache.pop(q);

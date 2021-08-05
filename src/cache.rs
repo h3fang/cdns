@@ -20,7 +20,7 @@ impl DNSCache {
         }
     }
 
-    pub fn get(&mut self, q: &op::Query, msg: &op::Message) -> Option<&op::Message> {
+    pub fn get(&mut self, q: &op::Query) -> Option<op::Message> {
         match self.cache.get_mut(q) {
             Some(entry) => {
                 let ttl = entry
@@ -31,15 +31,12 @@ impl DNSCache {
                     .unwrap_or(0) as i64;
                 let remaining = ttl - entry.timestamp.elapsed().as_secs() as i64;
                 if remaining >= 0 {
-                    entry.response.set_id(msg.id());
-                    if let Some(edns) = msg.edns() {
-                        entry.response.set_edns(edns.to_owned());
-                    }
-                    entry.response.answers_mut().iter_mut().for_each(|a| {
+                    let mut rsp = entry.response.to_owned();
+                    rsp.answers_mut().iter_mut().for_each(|a| {
                         a.set_ttl(remaining as u32);
                     });
                     info!("Cache hit, {}", q);
-                    return Some(&entry.response);
+                    return Some(rsp);
                 } else {
                     info!("Cache invalid, {}", q);
                 }
