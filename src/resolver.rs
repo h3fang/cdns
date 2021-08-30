@@ -19,9 +19,13 @@ pub struct Resolver {
 
 #[derive(Debug)]
 pub enum ResolveError {
+    // Https error.
     Reqwest(reqwest::Error),
+    // Failed to deserialize server response.
     Proto(ProtoError),
+    // Error status code in server responded DNS message.
     ErrorResponse,
+    // All servers failed to give valid response.
     AllFailed,
 }
 

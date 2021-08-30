@@ -19,11 +19,9 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-    - name: Build
-      run: cargo build --release
-    - name: Check
-      run: cargo check --release
-    - name: Test
-      run: cargo test --release
     - name: Clippy
       run: cargo clippy --release
+    - name: Test
+      run: cargo test --release
+    - name: Build
+      run: cargo build --release

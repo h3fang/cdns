@@ -57,6 +57,15 @@ impl Upstream {
             //         IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8844)),
             //     ],
             // ),
+            Upstream::new(
+                "https://dns.adguard.com/dns-query",
+                &[
+                    IpAddr::V4(Ipv4Addr::new(94, 140, 14, 140)),
+                    IpAddr::V4(Ipv4Addr::new(94, 140, 14, 141)),
+                    IpAddr::V6(Ipv6Addr::new(0x2a10, 0x50c0, 0, 0, 0, 0, 0x1, 0xff)),
+                    IpAddr::V6(Ipv6Addr::new(0x2a10, 0x50c0, 0, 0, 0, 0, 0x2, 0xff)),
+                ]
+            ),
         ]
     }
 }
