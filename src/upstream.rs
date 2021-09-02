@@ -64,7 +64,7 @@ impl Upstream {
                     IpAddr::V4(Ipv4Addr::new(94, 140, 14, 141)),
                     IpAddr::V6(Ipv6Addr::new(0x2a10, 0x50c0, 0, 0, 0, 0, 0x1, 0xff)),
                     IpAddr::V6(Ipv6Addr::new(0x2a10, 0x50c0, 0, 0, 0, 0, 0x2, 0xff)),
-                ]
+                ],
             ),
         ]
     }
