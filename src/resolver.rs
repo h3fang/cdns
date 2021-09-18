@@ -272,7 +272,7 @@ mod tests {
             .expect("Failed to resolve.");
 
         assert_eq!(q, r.queries()[0]);
-        println!("{:?}", r.answers());
+        r.answers().iter().for_each(|a| println!("{}", a));
         assert_eq!(name, *r.answers()[0].name());
     }
 
