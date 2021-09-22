@@ -20,8 +20,8 @@ jobs:
       with:
         toolchain: stable
     - name: Clippy
-      run: cargo clippy --release
+      run: cargo clippy
     - name: Test
-      run: cargo test --release
+      run: cargo test
     - name: Build
       run: cargo build --release
