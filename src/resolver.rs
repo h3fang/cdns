@@ -102,7 +102,6 @@ impl Resolver {
     ) -> Result<op::Message, ResolveError> {
         if let Some(rsp) = self.presets.get(q) {
             let mut rsp = rsp.to_owned();
-            rsp.set_id(msg.id());
             if let Some(edns) = msg.edns() {
                 rsp.set_edns(edns.to_owned());
             }
@@ -163,16 +162,24 @@ impl Resolver {
 
         info!("query {}", q);
 
+        /*
+        In order to maximize HTTP cache friendliness, DoH clients using media
+        formats that include the ID field from the DNS message header, such
+        as "application/dns-message", SHOULD use a DNS ID of 0 in every DNS request.
+        From https://datatracker.ietf.org/doc/html/rfc8484#section-4.1
+        */
+        let id = msg.id();
+        msg.set_id(0);
+
         // resolve from multiple DNS servers
-        match self.resolve(&q, &msg).await {
-            Ok(rsp) => Ok(rsp),
-            Err(e) => {
-                error!("Failed to resolve for {}, error: {:?}", q, e);
-                msg.set_message_type(op::MessageType::Response)
-                    .set_response_code(op::ResponseCode::FormErr);
-                Ok(msg)
-            }
-        }
+        let mut rsp = self.resolve(&q, &msg).await.unwrap_or_else(|e| {
+            error!("Failed to resolve for {}, error: {:?}", q, e);
+            msg.set_message_type(op::MessageType::Response)
+                .set_response_code(op::ResponseCode::FormErr);
+            msg
+        });
+        rsp.set_id(id);
+        Ok(rsp)
     }
 }
 
