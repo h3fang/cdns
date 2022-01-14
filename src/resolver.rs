@@ -57,7 +57,8 @@ impl Resolver {
             .default_headers(headers)
             .connect_timeout(std::time::Duration::from_secs(1))
             .timeout(std::time::Duration::from_secs(3))
-            .pool_idle_timeout(std::time::Duration::from_secs(10))
+            .pool_idle_timeout(std::time::Duration::from_secs(5))
+            .tcp_keepalive(Some(std::time::Duration::from_secs(5)))
             .https_only(true)
             .build()
             .expect("Failed to create reqwest::Client.");
