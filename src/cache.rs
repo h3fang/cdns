@@ -35,14 +35,14 @@ impl DNSCache {
                     rsp.answers_mut().iter_mut().for_each(|a| {
                         a.set_ttl(remaining as u32);
                     });
-                    info!("Cache hit, {}", q);
+                    info!("Cache hit, {q}");
                     return Some(rsp);
                 } else {
-                    info!("Cache invalid, {}", q);
+                    info!("Cache invalid, {q}");
                 }
             }
             None => {
-                info!("Cache miss, {}", q);
+                info!("Cache miss, {q}");
             }
         }
         None
@@ -87,9 +87,9 @@ mod tests {
                 .take(16)
                 .map(char::from)
                 .collect::<String>()
-                + format!("{}.com.", i).as_str();
+                + format!("{i}.com.").as_str();
             let name = rr::Name::from_ascii(&name)
-                .unwrap_or_else(|_| panic!("Invalid domain name {}", name));
+                .unwrap_or_else(|_| panic!("Invalid domain name {name}"));
             let mut msg = op::Message::new();
             msg.set_message_type(op::MessageType::Response);
             let type_a = rand::random::<bool>();

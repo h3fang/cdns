@@ -13,12 +13,12 @@ async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) {
         Ok(bytes) => match sock.send_to(&bytes, addr).await {
             Ok(_) => {
                 for ans in msg.answers() {
-                    info!("{}", ans);
+                    info!("{ans}");
                 }
             }
-            Err(e) => error!("Failed to send DNS response. Error: {}", e),
+            Err(e) => error!("Failed to send DNS response. Error: {e}"),
         },
-        Err(e) => error!("Failed to encode DNS response. Error: {}", e),
+        Err(e) => error!("Failed to encode DNS response. Error: {e}"),
     }
 }
 
@@ -32,7 +32,7 @@ async fn main() {
     let sock = Arc::new(
         UdpSocket::bind("127.0.0.1:53")
             .await
-            .unwrap_or_else(|e| panic!("Failed to create and bind socket. Error: {}", e)),
+            .unwrap_or_else(|e| panic!("Failed to create and bind socket. Error: {e}")),
     );
 
     let resolver = Arc::new(Resolver::new(2048));
@@ -43,7 +43,7 @@ async fn main() {
         let (len, addr) = sock
             .recv_from(&mut buf)
             .await
-            .unwrap_or_else(|e| panic!("Failed to receive packet. Error: {}", e));
+            .unwrap_or_else(|e| panic!("Failed to receive packet. Error: {e}"));
         let bytes = buf[..len].to_vec();
 
         let sock = sock.clone();

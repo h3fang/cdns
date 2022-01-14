@@ -8,7 +8,7 @@ pub struct Upstream {
 
 impl Upstream {
     pub fn new(url: &str, ips: &[IpAddr]) -> Upstream {
-        let u = url::Url::parse(url).unwrap_or_else(|_| panic!("Invalid upstream URL {}", url));
+        let u = url::Url::parse(url).unwrap_or_else(|_| panic!("Invalid upstream URL {url}"));
         Upstream {
             url: url.to_string(),
             domain: u.domain().unwrap_or("").to_lowercase() + ".",

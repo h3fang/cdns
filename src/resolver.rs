@@ -79,14 +79,14 @@ impl Resolver {
         q: &op::Query,
         msg: &op::Message,
     ) -> Result<(String, op::Message), ResolveError> {
-        info!("lookup {} with {}", q, url);
+        info!("lookup {q} with {url}");
         let rsp = self
             .https_client
             .post(url)
             .body(msg.to_vec()?)
             .send()
             .await?;
-        trace!("response = {:?}", rsp);
+        trace!("response = {rsp:?}");
         let bytes = rsp.error_for_status()?.bytes().await?;
         let msg = op::Message::from_vec(&bytes)?;
         if msg.response_code() != op::ResponseCode::NoError {
@@ -139,7 +139,7 @@ impl Resolver {
 
         while let Some(r) = buffered.next().await {
             if let Ok((url, rsp)) = r {
-                info!("Fastest response from {}", url);
+                info!("Fastest response from {url}");
                 self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
                 return Ok(rsp);
             }
@@ -154,14 +154,14 @@ impl Resolver {
         // ensure there is one and only one query in DNS message
         let n = msg.queries().iter().count();
         if n != 1 {
-            warn!("{} question(s) found in DNS query datagram.", n);
+            warn!("{n} question(s) found in DNS query datagram.");
             msg.set_message_type(op::MessageType::Response)
                 .set_response_code(op::ResponseCode::FormErr);
             return Ok(msg);
         }
         let q = msg.queries()[0].to_owned();
 
-        info!("query {}", q);
+        info!("query {q}");
 
         /*
         In order to maximize HTTP cache friendliness, DoH clients using media
@@ -174,7 +174,7 @@ impl Resolver {
 
         // resolve from multiple DNS servers
         let mut rsp = self.resolve(&q, &msg).await.unwrap_or_else(|e| {
-            error!("Failed to resolve for {}, error: {:?}", q, e);
+            error!("Failed to resolve for {q}, error: {e:?}");
             msg.set_message_type(op::MessageType::Response)
                 .set_response_code(op::ResponseCode::FormErr);
             msg
@@ -245,7 +245,7 @@ fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
     });
 
     let has_ip_host = upstreams.iter().any(|ups| {
-        let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {}", e));
+        let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {e}"));
         matches!(
             u.host(),
             Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_))
@@ -280,7 +280,7 @@ mod tests {
             .expect("Failed to resolve.");
 
         assert_eq!(q, r.queries()[0]);
-        r.answers().iter().for_each(|a| println!("{}", a));
+        r.answers().iter().for_each(|a| println!("{a}"));
         assert_eq!(name, *r.answers()[0].name());
     }
 
