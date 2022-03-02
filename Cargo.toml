@@ -11,7 +11,7 @@ edition = "2021"
 log = "0.4"
 env_logger = "0.9"
 lru = "0.7"
-trust-dns-proto = "0.20"
+trust-dns-proto = "0.21"
 url = "2.2"
 reqwest = { version = "0.11", default-features = false, features = ["rustls-tls-native-roots"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "macros", "time"] }
