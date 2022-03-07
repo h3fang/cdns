@@ -1,12 +1,15 @@
 use crate::cache::DNSCache;
 use crate::upstream::Upstream;
+
 use ahash::AHashMap as HashMap;
 use futures::{stream, StreamExt};
 use log::{error, info, trace, warn};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::net::IpAddr;
 use std::result::Result;
+use std::time::Duration;
 use tokio::sync::{watch, Mutex};
+use tokio::time::timeout;
 use trust_dns_proto::error::ProtoError;
 use trust_dns_proto::{op, rr};
 
@@ -113,7 +116,7 @@ impl Resolver {
 
         // query is ongoing, wait for the result
         if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() } {
-            if rx.changed().await.is_ok() {
+            if let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await {
                 return Ok(rx.borrow().clone());
             }
         }
