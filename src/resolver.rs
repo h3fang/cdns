@@ -1,12 +1,12 @@
 use crate::cache::DNSCache;
 use crate::upstream::Upstream;
+use ahash::AHashMap as HashMap;
 use futures::{stream, StreamExt};
 use log::{error, info, trace, warn};
 use reqwest::header::{HeaderMap, HeaderValue};
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::result::Result;
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 use trust_dns_proto::error::ProtoError;
 use trust_dns_proto::{op, rr};
 
@@ -15,6 +15,7 @@ pub struct Resolver {
     https_client: reqwest::Client,
     presets: HashMap<op::Query, op::Message>,
     cache: Mutex<DNSCache>,
+    ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
 }
 
 #[derive(Debug)]
@@ -70,6 +71,7 @@ impl Resolver {
             upstreams,
             https_client: client,
             cache: Mutex::new(DNSCache::new(cache_size)),
+            ongoing: Default::default(),
         }
     }
 
@@ -109,6 +111,13 @@ impl Resolver {
             return Ok(rsp);
         }
 
+        // query is ongoing, wait for the result
+        if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() } {
+            if rx.changed().await.is_ok() {
+                return Ok(rx.borrow().clone());
+            }
+        }
+
         // try to get response from cache
         {
             let mut cache = self.cache.lock().await;
@@ -126,6 +135,9 @@ impl Resolver {
             }
         }
 
+        let (tx, rx) = watch::channel(op::Message::new());
+        self.ongoing.lock().await.insert(q.clone(), rx);
+
         let domain = q.name().to_utf8().to_lowercase();
         let recursive = self.upstreams.iter().any(|ups| ups.domain == domain);
         let results: Vec<_> = self
@@ -141,6 +153,8 @@ impl Resolver {
             if let Ok((url, rsp)) = r {
                 info!("Fastest response from {url}");
                 self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
+                self.ongoing.lock().await.remove(q);
+                let _ = tx.send(rsp.clone());
                 return Ok(rsp);
             }
         }
