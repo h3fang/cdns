@@ -153,8 +153,8 @@ impl Resolver {
             if let Ok((url, rsp)) = r {
                 info!("Fastest response from {url}");
                 self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
-                self.ongoing.lock().await.remove(q);
                 let _ = tx.send(rsp.clone());
+                self.ongoing.lock().await.remove(q);
                 return Ok(rsp);
             }
         }
@@ -298,7 +298,7 @@ mod tests {
         assert_eq!(name, *r.answers()[0].name());
     }
 
-    async fn resolve_domains() {
+    async fn resolve_domains(repeat: usize) {
         let resolver = Resolver::new(2048);
 
         // Alexa Top 10
@@ -315,16 +315,28 @@ mod tests {
             "jd.com",
         ];
 
-        join_all(domains.into_iter().map(|d| resolve_domain(d, &resolver))).await;
+        join_all(
+            domains
+                .iter()
+                .cycle()
+                .take(repeat * domains.len())
+                .map(|d| resolve_domain(d, &resolver)),
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn resolve_domains_current_thread() {
-        resolve_domains().await;
+        resolve_domains(1).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn resolve_domains_multi_thread() {
-        resolve_domains().await;
+        resolve_domains(1).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn request_coalescing() {
+        resolve_domains(10).await;
     }
 }
