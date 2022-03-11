@@ -24,3 +24,4 @@ rand = "0.8"
 [profile.release]
 lto = true
 panic = 'abort'
+strip = true
