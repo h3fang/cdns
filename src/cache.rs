@@ -35,6 +35,12 @@ impl DNSCache {
                     rsp.answers_mut().iter_mut().for_each(|a| {
                         a.set_ttl(remaining as u32);
                     });
+                    rsp.additionals_mut().iter_mut().for_each(|a| {
+                        a.set_ttl(remaining as u32);
+                    });
+                    rsp.name_servers_mut().iter_mut().for_each(|a| {
+                        a.set_ttl(remaining as u32);
+                    });
                     info!("Cache hit, {q}");
                     return Some(rsp);
                 } else {

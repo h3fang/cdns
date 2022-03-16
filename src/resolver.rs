@@ -27,8 +27,6 @@ pub enum ResolveError {
     Reqwest(reqwest::Error),
     // Failed to deserialize server response.
     Proto(ProtoError),
-    // Error status code in server responded DNS message.
-    ErrorResponse,
     // All servers failed to give valid response.
     AllFailed,
 }
@@ -94,11 +92,7 @@ impl Resolver {
         trace!("response = {rsp:?}");
         let bytes = rsp.error_for_status()?.bytes().await?;
         let msg = op::Message::from_vec(&bytes)?;
-        if msg.response_code() != op::ResponseCode::NoError {
-            Err(ResolveError::ErrorResponse)
-        } else {
-            Ok((url.to_string(), msg))
-        }
+        Ok((url.to_string(), msg))
     }
 
     pub async fn resolve(
