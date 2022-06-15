@@ -1,5 +1,5 @@
 use crate::cache::DNSCache;
-use crate::upstream::Upstream;
+use crate::config::Config;
 
 use ahash::AHashMap as HashMap;
 use futures::{stream, StreamExt};
@@ -14,7 +14,7 @@ use trust_dns_proto::error::ProtoError;
 use trust_dns_proto::{op, rr};
 
 pub struct Resolver {
-    upstreams: Vec<Upstream>,
+    config: Config,
     https_client: reqwest::Client,
     presets: HashMap<op::Query, op::Message>,
     cache: Mutex<DNSCache>,
@@ -44,7 +44,7 @@ impl From<ProtoError> for ResolveError {
 }
 
 impl Resolver {
-    pub fn new(cache_size: usize) -> Resolver {
+    pub fn new(config: Config, cache_size: usize) -> Resolver {
         let mut headers = HeaderMap::new();
         headers.insert(
             "accept",
@@ -65,11 +65,11 @@ impl Resolver {
             .build()
             .expect("Failed to create reqwest::Client.");
 
-        let upstreams = Upstream::defaults();
-
+        let serialized = serde_json::to_string_pretty(&config).unwrap();
+        println!("{}", serialized);
         Resolver {
-            presets: bootstrap(&upstreams),
-            upstreams,
+            presets: bootstrap(&config),
+            config,
             https_client: client,
             cache: Mutex::new(DNSCache::new(cache_size)),
             ongoing: Default::default(),
@@ -136,13 +136,13 @@ impl Resolver {
         self.ongoing.lock().await.insert(q.clone(), rx);
 
         let domain = q.name().to_utf8().to_lowercase();
-        let recursive = self.upstreams.iter().any(|ups| ups.domain == domain);
-        let results: Vec<_> = self
-            .upstreams
+        let recursive = self.config.is_recursive(&domain);
+        let servers = self.config.match_rule(&domain);
+        let results = servers
             .iter()
-            .filter(|ups| !recursive || (ups.domain == "." || !ups.ips.is_empty()))
-            .map(|ups| async move { self.resolve_with_doh(&ups.url, q, msg).await })
-            .collect();
+            .filter(|s| !recursive || s.resolved)
+            .map(|s| async move { self.resolve_with_doh(&s.url, q, msg).await })
+            .collect::<Vec<_>>();
 
         let mut buffered = stream::iter(results).buffer_unordered(32);
 
@@ -195,9 +195,9 @@ impl Resolver {
     }
 }
 
-fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
+fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
     let mut presets = HashMap::new();
-    upstreams.iter().for_each(|x| {
+    config.groups.values().flat_map(|g| g.iter()).for_each(|x| {
         if !x.ips.is_empty() {
             let name = rr::Name::from_utf8(&x.domain)
                 .unwrap_or_else(|_| panic!("Invalid domain name {}", x.domain));
@@ -255,8 +255,8 @@ fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
         }
     });
 
-    let has_ip_host = upstreams.iter().any(|ups| {
-        let u = url::Url::parse(&ups.url).unwrap_or_else(|e| panic!("Invalid url, {e}"));
+    let has_ip_host = config.groups.values().flat_map(|g| g.iter()).any(|server| {
+        let u = url::Url::parse(&server.url).unwrap_or_else(|e| panic!("Invalid url, {e}"));
         matches!(
             u.host(),
             Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_))
@@ -264,7 +264,7 @@ fn bootstrap(upstreams: &[Upstream]) -> HashMap<op::Query, op::Message> {
     });
 
     if !has_ip_host && presets.is_empty() {
-        panic!("Failed to bootstrap upstream servers, at least one upstream with IP addresses should be specified.");
+        panic!("Failed to bootstrap upstream servers, at least one server with IP addresses should be specified.");
     }
 
     presets
@@ -296,7 +296,8 @@ mod tests {
     }
 
     async fn resolve_domains(repeat: usize) {
-        let resolver = Resolver::new(2048);
+        let config = Config::default();
+        let resolver = Resolver::new(config, 2048);
 
         // Alexa Top 10
         let domains = vec![

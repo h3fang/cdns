@@ -1,8 +1,10 @@
 mod cache;
+mod config;
 mod resolver;
-mod upstream;
+mod server;
 
 use crate::resolver::Resolver;
+use config::Config;
 use log::{error, info};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::UdpSocket;
@@ -29,13 +31,18 @@ async fn main() {
         .format_timestamp_micros()
         .init();
 
+    let cfg_path = std::env::args()
+        .nth(1)
+        .expect("Expected configuration file path.");
+
+    let config = Config::from_file(&cfg_path).unwrap_or_default();
+    let resolver = Arc::new(Resolver::new(config, 2048));
+
     let sock = Arc::new(
         UdpSocket::bind("127.0.0.1:53")
             .await
             .unwrap_or_else(|e| panic!("Failed to create and bind socket. Error: {e}")),
     );
-
-    let resolver = Arc::new(Resolver::new(2048));
 
     let mut buf = vec![0u8; 512];
 
