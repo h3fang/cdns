@@ -13,16 +13,16 @@ The configuration file uses [JSON](https://www.json.org) format. It includes a `
 Each key-value pair in `groups` specifies the group name and an array of servers. Each server consists of the URL of the DNS-over-HTTPS server and an optional array of well-known IPs for the server. The server URL should support POST for [RFC 8484](https://tools.ietf.org/html/rfc8484) UDP wire format.
 
 Each `rule` in `rules` specifies a matching criterion for domains and the name of the server group to use for the matching domain. The matching criterion is a domain and will match any [subdomain](https://en.wikipedia.org/wiki/Subdomain) that is a child domain of it (including itself). For example, `example.com` matches:
-- example.com
-- www.example.com
-- a.b.example.com
+- `example.com`
+- `www.example.com`
+- `a.b.example.com`
 
 but does not match:
-- xample.com
-- example.net
-- example1.com
-- 2example.com
-- www.exa3mple.com
+- `xample.com`
+- `example.net`
+- `example1.com`
+- `2example.com`
+- `www.exa3mple.com`
 
 The rules are checked in the array order. If a rule matches the DNS query domain, the corresponding server group will be chosen, and the remaining rules are skipped.
 
