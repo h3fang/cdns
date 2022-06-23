@@ -197,11 +197,13 @@ impl Resolver {
 
 fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
     let mut presets = HashMap::new();
-    config.groups.values().flat_map(|g| g.iter()).for_each(|x| {
-        if !x.ips.is_empty() {
-            let name = rr::Name::from_utf8(&x.domain)
-                .unwrap_or_else(|_| panic!("Invalid domain name {}", x.domain));
-            let v4: Vec<_> = x
+    let mut valid = false;
+    config.groups.values().flat_map(|g| g.iter()).for_each(|s| {
+        valid |= s.resolved;
+        if !s.ips.is_empty() {
+            let name = rr::Name::from_utf8(&s.domain)
+                .unwrap_or_else(|_| panic!("Invalid domain name {}", s.domain));
+            let v4: Vec<_> = s
                 .ips
                 .iter()
                 .filter_map(|&ip| match ip {
@@ -227,7 +229,7 @@ fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
                 presets.insert(q, msg);
             }
 
-            let v6: Vec<_> = x
+            let v6: Vec<_> = s
                 .ips
                 .iter()
                 .filter_map(|&ip| match ip {
@@ -255,16 +257,8 @@ fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
         }
     });
 
-    let has_ip_host = config.groups.values().flat_map(|g| g.iter()).any(|server| {
-        let u = url::Url::parse(&server.url).unwrap_or_else(|e| panic!("Invalid url, {e}"));
-        matches!(
-            u.host(),
-            Some(url::Host::Ipv4(_)) | Some(url::Host::Ipv6(_))
-        )
-    });
-
-    if !has_ip_host && presets.is_empty() {
-        panic!("Failed to bootstrap upstream servers, at least one server with IP addresses should be specified.");
+    if !valid {
+        panic!("Failed to bootstrap DOH servers, at least one server with IP addresses should be specified.");
     }
 
     presets
