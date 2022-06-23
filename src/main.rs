@@ -44,7 +44,8 @@ async fn main() {
             .unwrap_or_else(|e| panic!("Failed to create and bind socket. Error: {e}")),
     );
 
-    let mut buf = vec![0u8; 512];
+    // maximum size of the DNS message, from https://datatracker.ietf.org/doc/html/rfc8484#section-6
+    let mut buf = vec![0u8; 65535];
 
     loop {
         let (len, addr) = sock
