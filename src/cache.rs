@@ -1,6 +1,7 @@
+use std::time::Instant;
+
 use log::info;
 use lru::LruCache;
-use std::time::Instant;
 use trust_dns_proto::op;
 
 struct DNSEntry {

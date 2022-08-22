@@ -1,10 +1,10 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use ahash::AHashMap as HashMap;
 use ahash::AHashSet as HashSet;
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::server::Server;
 

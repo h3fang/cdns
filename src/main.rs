@@ -3,12 +3,14 @@ mod config;
 mod resolver;
 mod server;
 
-use crate::resolver::Resolver;
-use config::Config;
-use log::{error, info};
 use std::{net::SocketAddr, sync::Arc};
+
+use log::{error, info};
 use tokio::net::UdpSocket;
 use trust_dns_proto::op;
+
+use config::Config;
+use resolver::Resolver;
 
 async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) {
     match msg.to_vec() {

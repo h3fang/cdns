@@ -1,13 +1,15 @@
 use crate::cache::DNSCache;
 use crate::config::Config;
 
-use ahash::AHashMap as HashMap;
-use futures::{stream, StreamExt};
-use log::{error, info, trace, warn};
-use reqwest::header::{HeaderMap, HeaderValue};
 use std::net::IpAddr;
 use std::result::Result;
 use std::time::Duration;
+
+use ahash::AHashMap as HashMap;
+use log::{error, info, trace, warn};
+
+use futures::{stream, StreamExt};
+use reqwest::header::{HeaderMap, HeaderValue};
 use tokio::sync::{watch, Mutex};
 use tokio::time::timeout;
 use trust_dns_proto::error::ProtoError;
