@@ -156,6 +156,7 @@ impl Resolver {
             }
         }
 
+        self.ongoing.lock().await.remove(q);
         Err(ResolveError::AllFailed)
     }
 
