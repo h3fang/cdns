@@ -104,7 +104,7 @@ impl Resolver {
     ) -> Result<op::Message, ResolveError> {
         if let Some(rsp) = self.presets.get(q) {
             let mut rsp = rsp.to_owned();
-            if let Some(edns) = msg.edns() {
+            if let Some(edns) = msg.extensions() {
                 rsp.set_edns(edns.to_owned());
             }
             return Ok(rsp);
@@ -123,7 +123,7 @@ impl Resolver {
             match cache.get(q) {
                 Some(mut rsp) => {
                     rsp.set_id(msg.id());
-                    if let Some(edns) = msg.edns() {
+                    if let Some(edns) = msg.extensions() {
                         rsp.set_edns(edns.to_owned());
                     }
                     return Ok(rsp);
