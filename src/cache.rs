@@ -17,7 +17,7 @@ pub struct DNSCache {
 impl DNSCache {
     pub fn new(cap: usize) -> DNSCache {
         DNSCache {
-            cache: LruCache::new(cap),
+            cache: LruCache::new(cap.try_into().unwrap()),
         }
     }
 
