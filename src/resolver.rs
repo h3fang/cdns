@@ -140,13 +140,13 @@ impl Resolver {
         let domain = q.name().to_utf8().to_lowercase();
         let recursive = self.config.is_recursive(&domain);
         let servers = self.config.match_rule(&domain);
-        let results = servers
+        let futures = servers
             .iter()
             .filter(|s| !recursive || s.resolved)
-            .map(|s| async move { self.resolve_with_doh(&s.url, q, msg).await })
+            .map(|s| self.resolve_with_doh(&s.url, q, msg))
             .collect::<Vec<_>>();
 
-        let mut buffered = stream::iter(results).buffer_unordered(32);
+        let mut buffered = stream::iter(futures).buffer_unordered(32);
 
         while let Some(r) = buffered.next().await {
             if let Ok((url, rsp)) = r {
