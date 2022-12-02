@@ -5,6 +5,7 @@ mod server;
 
 use std::{net::SocketAddr, sync::Arc};
 
+use anyhow::Result;
 use log::{error, info};
 use tokio::net::UdpSocket;
 use trust_dns_proto::op;
@@ -12,22 +13,17 @@ use trust_dns_proto::op;
 use config::Config;
 use resolver::Resolver;
 
-async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) {
-    match msg.to_vec() {
-        Ok(bytes) => match sock.send_to(&bytes, addr).await {
-            Ok(_) => {
-                for ans in msg.answers() {
-                    info!("{ans}");
-                }
-            }
-            Err(e) => error!("Failed to send DNS response. Error: {e}"),
-        },
-        Err(e) => error!("Failed to encode DNS response. Error: {e}"),
+async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) -> Result<()> {
+    let bytes = msg.to_vec()?;
+    sock.send_to(&bytes, addr).await?;
+    for ans in msg.answers() {
+        info!("{ans}");
     }
+    Ok(())
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
-async fn main() {
+async fn main() -> std::io::Result<()> {
     let env = env_logger::Env::default().default_filter_or("info");
     env_logger::Builder::from_env(env)
         .format_timestamp_micros()
@@ -40,20 +36,13 @@ async fn main() {
     let config = Config::from_file(&cfg_path).unwrap_or_default();
     let resolver = Arc::new(Resolver::new(config, 2048));
 
-    let sock = Arc::new(
-        UdpSocket::bind("127.0.0.1:53")
-            .await
-            .unwrap_or_else(|e| panic!("Failed to create and bind socket. Error: {e}")),
-    );
+    let sock = Arc::new(UdpSocket::bind("127.0.0.1:53").await?);
 
     // maximum size of the DNS message, from https://datatracker.ietf.org/doc/html/rfc8484#section-6
     let mut buf = vec![0u8; 65535];
 
     loop {
-        let (len, addr) = sock
-            .recv_from(&mut buf)
-            .await
-            .unwrap_or_else(|e| panic!("Failed to receive packet. Error: {e}"));
+        let (len, addr) = sock.recv_from(&mut buf).await?;
         let bytes = buf[..len].to_vec();
 
         let sock = sock.clone();
@@ -61,8 +50,12 @@ async fn main() {
 
         tokio::spawn(async move {
             match resolver.handle_packet(bytes).await {
-                Ok(rsp) => respond(&rsp, &sock, &addr).await,
-                Err(e) => error!("{:?}", e),
+                Ok(rsp) => {
+                    if let Err(e) = respond(&rsp, &sock, &addr).await {
+                        error!("Error in respond: {:?}.", e);
+                    }
+                }
+                Err(e) => error!("Error in handle_packet: {:?}.", e),
             }
         });
     }

@@ -67,8 +67,6 @@ impl Resolver {
             .build()
             .expect("Failed to create reqwest::Client.");
 
-        let serialized = serde_json::to_string_pretty(&config).unwrap();
-        println!("{}", serialized);
         Resolver {
             presets: bootstrap(&config),
             config,
@@ -91,7 +89,7 @@ impl Resolver {
             .body(msg.to_vec()?)
             .send()
             .await?;
-        trace!("response = {rsp:?}");
+        trace!("query={q:?}, url={url}, response={rsp:?}");
         let bytes = rsp.error_for_status()?.bytes().await?;
         let msg = op::Message::from_vec(&bytes)?;
         Ok((url.to_string(), msg))
