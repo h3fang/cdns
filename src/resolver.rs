@@ -1,7 +1,7 @@
 use crate::cache::DNSCache;
 use crate::config::Config;
 
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::result::Result;
 use std::time::Duration;
 
@@ -13,12 +13,11 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use tokio::sync::{watch, Mutex};
 use tokio::time::timeout;
 use trust_dns_proto::error::ProtoError;
-use trust_dns_proto::{op, rr};
+use trust_dns_proto::op;
 
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
-    presets: HashMap<op::Query, op::Message>,
     cache: Mutex<DNSCache>,
     ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
 }
@@ -57,35 +56,51 @@ impl Resolver {
             HeaderValue::from_static("application/dns-message"),
         );
 
-        let client = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .default_headers(headers)
             .connect_timeout(std::time::Duration::from_secs(1))
             .timeout(std::time::Duration::from_secs(3))
             .pool_idle_timeout(std::time::Duration::from_secs(5))
             .tcp_keepalive(Some(std::time::Duration::from_secs(5)))
             .https_only(true)
+            .no_trust_dns();
+
+        for s in config.groups.values().flatten() {
+            if s.ips.is_empty() {
+                continue;
+            }
+            if let Some(d) = s.url.domain() {
+                let addrs = s
+                    .ips
+                    .iter()
+                    .map(|ip| SocketAddr::new(*ip, 443))
+                    .collect::<Vec<_>>();
+                builder = builder.resolve_to_addrs(d, &addrs);
+            }
+        }
+
+        let https_client = builder
             .build()
             .unwrap_or_else(|e| panic!("Failed to create reqwest::Client, error: {e}"));
 
         Resolver {
-            presets: bootstrap(&config),
             config,
-            https_client: client,
+            https_client,
             cache: Mutex::new(DNSCache::new(cache_size)),
             ongoing: Default::default(),
         }
     }
 
-    pub async fn resolve_with_doh(
+    pub async fn query_with_doh(
         &self,
-        url: &str,
+        url: &url::Url,
         q: &op::Query,
         msg: &op::Message,
     ) -> Result<(String, op::Message), ResolveError> {
         info!("lookup {q} with {url}");
         let rsp = self
             .https_client
-            .post(url)
+            .post(url.clone())
             .body(msg.to_vec()?)
             .send()
             .await?;
@@ -95,19 +110,11 @@ impl Resolver {
         Ok((url.to_string(), msg))
     }
 
-    pub async fn resolve(
+    pub async fn query(
         &self,
         q: &op::Query,
         msg: &op::Message,
     ) -> Result<op::Message, ResolveError> {
-        if let Some(rsp) = self.presets.get(q) {
-            let mut rsp = rsp.to_owned();
-            if let Some(edns) = msg.extensions() {
-                rsp.set_edns(edns.to_owned());
-            }
-            return Ok(rsp);
-        }
-
         // query is ongoing, wait for the result
         if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() } {
             if let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await {
@@ -119,11 +126,7 @@ impl Resolver {
         {
             let mut cache = self.cache.lock().await;
             match cache.get(q) {
-                Some(mut rsp) => {
-                    rsp.set_id(msg.id());
-                    if let Some(edns) = msg.extensions() {
-                        rsp.set_edns(edns.to_owned());
-                    }
+                Some(rsp) => {
                     return Ok(rsp);
                 }
                 None => {
@@ -140,8 +143,8 @@ impl Resolver {
         let servers = self.config.match_rule(&domain);
         let futures = servers
             .iter()
-            .filter(|s| !recursive || s.resolved)
-            .map(|s| self.resolve_with_doh(&s.url, q, msg))
+            .filter(|s| !recursive || s.resolved())
+            .map(|s| self.query_with_doh(&s.url, q, msg))
             .collect::<Vec<_>>();
 
         let mut buffered = stream::iter(futures).buffer_unordered(32);
@@ -160,7 +163,7 @@ impl Resolver {
         Err(ResolveError::AllFailed)
     }
 
-    pub async fn handle_packet(&self, bytes: Vec<u8>) -> Result<op::Message, ResolveError> {
+    pub async fn resolve(&self, bytes: Vec<u8>) -> Result<op::Message, ResolveError> {
         let mut msg = op::Message::from_vec(&bytes)?;
 
         // ensure there is one and only one query in DNS message
@@ -185,7 +188,7 @@ impl Resolver {
         msg.set_id(0);
 
         // resolve from multiple DNS servers
-        let mut rsp = self.resolve(&q, &msg).await.unwrap_or_else(|e| {
+        let mut rsp = self.query(&q, &msg).await.unwrap_or_else(|e| {
             error!("Failed to resolve for {q}, error: {e:?}");
             msg.set_message_type(op::MessageType::Response)
                 .set_response_code(op::ResponseCode::FormErr);
@@ -196,82 +199,13 @@ impl Resolver {
     }
 }
 
-fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
-    let mut presets = HashMap::new();
-    let mut valid = false;
-    config.groups.values().flat_map(|g| g.iter()).for_each(|s| {
-        valid |= s.resolved;
-        if !s.ips.is_empty() {
-            let name = rr::Name::from_utf8(&s.domain)
-                .unwrap_or_else(|e| panic!("Invalid domain: {}, error: {e}", s.domain));
-            let v4: Vec<_> = s
-                .ips
-                .iter()
-                .filter_map(|&ip| match ip {
-                    IpAddr::V4(addr) => Some(addr),
-                    _ => None,
-                })
-                .collect();
-            if !v4.is_empty() {
-                let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::A);
-                let mut msg = op::Message::new();
-                msg.set_message_type(op::MessageType::Response)
-                    .set_authoritative(true)
-                    .set_recursion_available(true)
-                    .set_response_code(op::ResponseCode::NoError)
-                    .add_query(q.to_owned());
-                v4.iter().for_each(|&ip| {
-                    msg.add_answer(rr::Record::from_rdata(
-                        name.to_owned(),
-                        std::u32::MAX,
-                        rr::RData::A(ip),
-                    ));
-                });
-                presets.insert(q, msg);
-            }
-
-            let v6: Vec<_> = s
-                .ips
-                .iter()
-                .filter_map(|&ip| match ip {
-                    IpAddr::V6(addr) => Some(addr),
-                    _ => None,
-                })
-                .collect();
-            if !v6.is_empty() {
-                let q = op::Query::query(name.to_owned(), rr::record_type::RecordType::AAAA);
-                let mut msg = op::Message::new();
-                msg.set_message_type(op::MessageType::Response)
-                    .set_authoritative(true)
-                    .set_recursion_available(true)
-                    .set_response_code(op::ResponseCode::NoError)
-                    .add_query(q.to_owned());
-                v6.iter().for_each(|&ip| {
-                    msg.add_answer(rr::Record::from_rdata(
-                        name.to_owned(),
-                        std::u32::MAX,
-                        rr::RData::AAAA(ip),
-                    ));
-                });
-                presets.insert(q, msg);
-            }
-        }
-    });
-
-    if !valid {
-        panic!("Failed to bootstrap DOH servers, at least one server with IP addresses should be specified.");
-    }
-
-    presets
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use futures::future::join_all;
     use trust_dns_proto::rr;
 
-    async fn resolve_domain(domain: &str, resolver: &Resolver) {
+    async fn resolve_domain(domain: &str, resolver: &Resolver) -> anyhow::Result<()> {
         let name = rr::Name::from_ascii(domain)
             .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
@@ -280,15 +214,18 @@ mod tests {
             .add_query(q.to_owned())
             .set_message_type(op::MessageType::Query)
             .set_recursion_desired(true);
+        let bytes = msg.to_vec()?;
 
         let r = resolver
-            .resolve(&q, &msg)
+            .resolve(bytes)
             .await
             .unwrap_or_else(|e| panic!("Failed to resolve, error: {e:?}"));
 
+        assert_eq!(msg.id(), r.id());
         assert_eq!(q, r.queries()[0]);
         r.answers().iter().for_each(|a| println!("{a}"));
         assert_eq!(name, *r.answers()[0].name());
+        Ok(())
     }
 
     async fn resolve_domains(repeat: usize) {

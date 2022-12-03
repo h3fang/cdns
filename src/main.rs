@@ -33,7 +33,10 @@ async fn main() -> std::io::Result<()> {
         .nth(1)
         .expect("Expected configuration file path.");
 
-    let config = Config::from_file(&cfg_path).unwrap_or_default();
+    let config = Config::from_file(&cfg_path).unwrap_or_else(|e| {
+        error!("Failed to parse config file: {cfg_path}, error: {e}");
+        Config::default()
+    });
     let resolver = Arc::new(Resolver::new(config, 2048));
 
     let sock = Arc::new(UdpSocket::bind("127.0.0.1:53").await?);
@@ -49,13 +52,13 @@ async fn main() -> std::io::Result<()> {
         let resolver = resolver.clone();
 
         tokio::spawn(async move {
-            match resolver.handle_packet(bytes).await {
+            match resolver.resolve(bytes).await {
                 Ok(rsp) => {
                     if let Err(e) = respond(&rsp, &sock, &addr).await {
-                        error!("Error in respond: {:?}.", e);
+                        error!("Failed to send response: {:?}.", e);
                     }
                 }
-                Err(e) => error!("Error in handle_packet: {:?}.", e),
+                Err(e) => error!("Failed to resolve: {:?}.", e),
             }
         });
     }

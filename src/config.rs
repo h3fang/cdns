@@ -1,10 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use ahash::AHashMap as HashMap;
-use ahash::AHashSet as HashSet;
-
+use ahash::HashMap;
+use ahash::HashSet;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::server::Server;
 
@@ -13,36 +13,32 @@ pub struct Config {
     pub groups: HashMap<String, Vec<Server>>,
     #[serde(default)]
     pub rules: Vec<(String, String)>,
-    #[serde(default, skip_serializing)]
-    server_domains: HashSet<String>,
+    #[serde(skip)]
+    unresolved_domains: HashSet<String>,
 }
 
 impl Config {
-    fn set_domains(&mut self) {
-        self.groups
-            .values_mut()
-            .for_each(|g| g.iter_mut().for_each(|s| s.extract_domain()));
-
-        self.server_domains = self
+    fn collect_unresolved_domains(&mut self) {
+        self.unresolved_domains = self
             .groups
             .values()
-            .flat_map(|g| {
-                g.iter().filter_map(|s| {
-                    if s.domain != "." {
-                        Some(s.domain.to_string())
-                    } else {
-                        None
-                    }
-                })
-            })
+            .flat_map(|g| g.iter().filter_map(|s| s.url.domain().map(String::from)))
             .collect();
+    }
+
+    fn is_valid(&self) -> bool {
+        self.groups.values().flatten().any(|s| s.resolved())
     }
 
     pub fn from_file(path: &str) -> Result<Self> {
         let s = std::fs::read_to_string(path)?;
         let mut config: Config = serde_json::from_str(&s)?;
-        config.set_domains();
-        Ok(config)
+        config.collect_unresolved_domains();
+        if config.is_valid() {
+            Ok(config)
+        } else {
+            panic!("Failed to bootstrap DOH servers, at least one server with IP addresses should be specified.");
+        }
     }
 
     pub fn match_rule(&self, domain: &str) -> &Vec<Server> {
@@ -59,61 +55,59 @@ impl Config {
             .unwrap_or_else(|| self.groups.values().next().unwrap())
     }
 
-    pub fn is_recursive(&self, domain: &str) -> bool {
-        self.server_domains.contains(domain)
+    pub fn is_recursive(&self, fqdn: &str) -> bool {
+        self.unresolved_domains.contains(fqdn.trim_end_matches('.'))
     }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let mut groups = HashMap::new();
+        let mut groups = HashMap::default();
 
         groups.insert(
             "default".to_string(),
             vec![
                 Server {
-                    url: "https://doh.pub/dns-query".into(),
-                    ..Default::default()
+                    url: Url::parse("https://doh.pub/dns-query").unwrap(),
+                    ips: vec![],
                 },
                 Server {
-                    url: "https://dns.alidns.com/dns-query".into(),
+                    url: Url::parse("https://dns.alidns.com/dns-query").unwrap(),
                     ips: vec![
                         IpAddr::V4(Ipv4Addr::new(223, 5, 5, 5)),
                         IpAddr::V4(Ipv4Addr::new(223, 6, 6, 6)),
                         IpAddr::V6(Ipv6Addr::new(0x2400, 0x3200, 0, 0, 0, 0, 0, 0x1)),
                         IpAddr::V6(Ipv6Addr::new(0x2400, 0x3200, 0xbaba, 0, 0, 0, 0, 0x1)),
                     ],
-                    ..Default::default()
                 },
                 Server {
-                    url: "https://cloudflare-dns.com/dns-query".into(),
+                    url: Url::parse("https://cloudflare-dns.com/dns-query").unwrap(),
                     ips: vec![
                         IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
                         IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1)),
                         IpAddr::V6(Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111)),
                         IpAddr::V6(Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1001)),
                     ],
-                    ..Default::default()
                 },
                 Server {
-                    url: "https://dns.google/dns-query".into(),
+                    url: Url::parse("https://dns.google/dns-query").unwrap(),
                     ips: vec![
                         IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
                         IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4)),
                         IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888)),
                         IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8844)),
                     ],
-                    ..Default::default()
                 },
             ],
         );
 
-        let mut config = Self {
+        let mut config = Config {
             groups,
-            rules: Default::default(),
-            server_domains: Default::default(),
+            rules: vec![],
+            unresolved_domains: Default::default(),
         };
-        config.set_domains();
+        config.collect_unresolved_domains();
+        assert!(config.is_valid());
         config
     }
 }
