@@ -1,7 +1,7 @@
 [package]
 name = "cdns"
 description = "Concurrent DNS-over-Https resolver."
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Fang He <hf.enigma@gmail.com>"]
 edition = "2021"
 
