@@ -22,7 +22,8 @@ pub struct Server {
 impl Server {
     pub fn extract_domain(&mut self) {
         let url = &self.url;
-        let u = url::Url::parse(url).unwrap_or_else(|_| panic!("Invalid Server URL: {url}"));
+        let u = url::Url::parse(url)
+            .unwrap_or_else(|e| panic!("Invalid server url: {url}, error: {e}"));
         self.domain = u.domain().unwrap_or("").to_lowercase() + ".";
         self.resolved = self.domain == "." || !self.ips.is_empty();
     }

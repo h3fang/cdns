@@ -17,7 +17,7 @@ pub struct DNSCache {
 impl DNSCache {
     pub fn new(cap: usize) -> DNSCache {
         DNSCache {
-            cache: LruCache::new(cap.try_into().unwrap()),
+            cache: LruCache::new(cap.try_into().expect("Cache capacity can not be zero.")),
         }
     }
 
@@ -89,14 +89,14 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut cache = DNSCache::new(n);
         for i in 0..n {
-            let name = rand::thread_rng()
+            let domain = rand::thread_rng()
                 .sample_iter(&Alphanumeric)
                 .take(16)
                 .map(char::from)
                 .collect::<String>()
                 + format!("{i}.com.").as_str();
-            let name = rr::Name::from_ascii(&name)
-                .unwrap_or_else(|_| panic!("Invalid domain name {name}"));
+            let name = rr::Name::from_ascii(&domain)
+                .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
             let mut msg = op::Message::new();
             msg.set_message_type(op::MessageType::Response);
             let type_a = rand::random::<bool>();

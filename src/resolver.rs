@@ -65,7 +65,7 @@ impl Resolver {
             .tcp_keepalive(Some(std::time::Duration::from_secs(5)))
             .https_only(true)
             .build()
-            .expect("Failed to create reqwest::Client.");
+            .unwrap_or_else(|e| panic!("Failed to create reqwest::Client, error: {e}"));
 
         Resolver {
             presets: bootstrap(&config),
@@ -203,7 +203,7 @@ fn bootstrap(config: &Config) -> HashMap<op::Query, op::Message> {
         valid |= s.resolved;
         if !s.ips.is_empty() {
             let name = rr::Name::from_utf8(&s.domain)
-                .unwrap_or_else(|_| panic!("Invalid domain name {}", s.domain));
+                .unwrap_or_else(|e| panic!("Invalid domain: {}, error: {e}", s.domain));
             let v4: Vec<_> = s
                 .ips
                 .iter()
@@ -272,7 +272,8 @@ mod tests {
     use trust_dns_proto::rr;
 
     async fn resolve_domain(domain: &str, resolver: &Resolver) {
-        let name = rr::Name::from_ascii(domain).expect("Invalid domain name.");
+        let name = rr::Name::from_ascii(domain)
+            .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
         let mut msg = op::Message::new();
         msg.set_id(rand::random::<u16>())
@@ -283,7 +284,7 @@ mod tests {
         let r = resolver
             .resolve(&q, &msg)
             .await
-            .expect("Failed to resolve.");
+            .unwrap_or_else(|e| panic!("Failed to resolve, error: {e:?}"));
 
         assert_eq!(q, r.queries()[0]);
         r.answers().iter().for_each(|a| println!("{a}"));
