@@ -6,7 +6,7 @@ mod server;
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
-use log::{error, info};
+use log::{error, info, warn};
 use tokio::net::UdpSocket;
 use trust_dns_proto::op;
 
@@ -29,14 +29,17 @@ async fn main() -> std::io::Result<()> {
         .format_timestamp_micros()
         .init();
 
-    let cfg_path = std::env::args()
-        .nth(1)
-        .expect("Expected configuration file path.");
+    let config = match std::env::args().nth(1) {
+        Some(path) => match Config::from_file(&path) {
+            Ok(cfg) => cfg,
+            Err(e) => panic!("Failed to parse config file: {path}, error: {e}"),
+        },
+        None => {
+            warn!("Using default configuration.");
+            Config::default()
+        }
+    };
 
-    let config = Config::from_file(&cfg_path).unwrap_or_else(|e| {
-        error!("Failed to parse config file: {cfg_path}, error: {e}");
-        Config::default()
-    });
     let resolver = Arc::new(Resolver::new(config, 2048));
 
     let sock = Arc::new(UdpSocket::bind("127.0.0.1:53").await?);

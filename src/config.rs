@@ -37,7 +37,9 @@ impl Config {
         if config.is_valid() {
             Ok(config)
         } else {
-            panic!("Failed to bootstrap DOH servers, at least one server with IP addresses should be specified.");
+            Err(anyhow::anyhow!(
+                "Invalid config file. At least one server with IP addresses should be specified."
+            ))
         }
     }
 
