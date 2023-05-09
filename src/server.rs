@@ -8,10 +8,12 @@ pub struct Server {
     pub url: Url,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ips: Vec<IpAddr>,
+    #[serde(skip)]
+    pub resolved: bool,
 }
 
 impl Server {
-    pub fn resolved(&self) -> bool {
+    pub fn is_resolved(&self) -> bool {
         !self.ips.is_empty()
             || match self.url.host() {
                 Some(h) => match h {

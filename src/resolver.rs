@@ -143,7 +143,7 @@ impl Resolver {
         let servers = self.config.match_rule(&domain);
         let futures = servers
             .iter()
-            .filter(|s| !recursive || s.resolved())
+            .filter(|s| !recursive || s.resolved)
             .map(|s| self.query_with_doh(&s.url, q, msg))
             .collect::<Vec<_>>();
 
