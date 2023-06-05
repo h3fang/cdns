@@ -15,7 +15,7 @@ ahash = { version = "0.8", features = ["serde"] }
 lru = "0.10"
 
 futures = "0.3"
-url = { version = "2.3", features = ["serde"] }
+url = { version = "2.4", features = ["serde"] }
 trust-dns-proto = "0.22"
 reqwest = { version = "0.11", features = ["stream"] }
 tokio = { version = "1", features = [
