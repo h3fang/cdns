@@ -126,7 +126,10 @@ impl Resolver {
         {
             let mut cache = self.cache.lock().await;
             match cache.get(q) {
-                Some(rsp) => {
+                Some(mut rsp) => {
+                    if let Some(edns) = msg.extensions() {
+                        rsp.set_edns(edns.clone());
+                    }
                     return Ok(rsp);
                 }
                 None => {
