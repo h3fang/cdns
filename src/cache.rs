@@ -82,7 +82,10 @@ mod tests {
     use super::*;
     use rand::{distributions::Alphanumeric, Rng};
     use std::net::{Ipv4Addr, Ipv6Addr};
-    use trust_dns_proto::rr;
+    use trust_dns_proto::rr::{
+        self,
+        rdata::{A, AAAA},
+    };
 
     #[test]
     fn populate_cache() {
@@ -103,9 +106,9 @@ mod tests {
             let type_a = rand::random::<bool>();
             for _ in 0..(rng.gen_range(1..5)) {
                 let rdata = if type_a {
-                    rr::RData::A(Ipv4Addr::from(rand::random::<u32>()))
+                    rr::RData::A(A(Ipv4Addr::from(rand::random::<u32>())))
                 } else {
-                    rr::RData::AAAA(Ipv6Addr::from(rand::random::<u128>()))
+                    rr::RData::AAAA(AAAA(Ipv6Addr::from(rand::random::<u128>())))
                 };
                 msg.add_answer(rr::Record::from_rdata(
                     name.to_owned(),
