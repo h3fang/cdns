@@ -22,7 +22,7 @@ impl DNSCache {
     }
 
     pub fn get(&mut self, q: &op::Query) -> Option<op::Message> {
-        match self.cache.get_mut(q) {
+        match self.cache.get(q) {
             Some(entry) => {
                 let ttl = entry
                     .message
