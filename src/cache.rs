@@ -6,7 +6,7 @@ use trust_dns_proto::op;
 
 struct DNSEntry {
     timestamp: Instant,
-    response: op::Message,
+    message: op::Message,
 }
 
 /// LRU DNS cache
@@ -25,25 +25,26 @@ impl DNSCache {
         match self.cache.get_mut(q) {
             Some(entry) => {
                 let ttl = entry
-                    .response
+                    .message
                     .all_sections()
                     .map(|a| a.ttl())
                     .min()
-                    .unwrap_or(0) as i64;
-                let remaining = ttl - entry.timestamp.elapsed().as_secs() as i64;
-                if remaining >= 0 {
-                    let mut rsp = entry.response.to_owned();
-                    rsp.answers_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining as u32);
+                    .unwrap_or(0) as u64;
+                let elapsed = entry.timestamp.elapsed().as_secs();
+                if ttl > elapsed {
+                    let remaining = (ttl - elapsed) as u32;
+                    let mut msg = entry.message.to_owned();
+                    msg.answers_mut().iter_mut().for_each(|a| {
+                        a.set_ttl(remaining);
                     });
-                    rsp.additionals_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining as u32);
+                    msg.additionals_mut().iter_mut().for_each(|a| {
+                        a.set_ttl(remaining);
                     });
-                    rsp.name_servers_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining as u32);
+                    msg.name_servers_mut().iter_mut().for_each(|a| {
+                        a.set_ttl(remaining);
                     });
                     info!("Cache hit, {q}");
-                    return Some(rsp);
+                    return Some(msg);
                 } else {
                     info!("Cache invalid, {q}");
                 }
@@ -55,12 +56,12 @@ impl DNSCache {
         None
     }
 
-    pub fn put(&mut self, q: op::Query, rsp: op::Message) {
+    pub fn put(&mut self, q: op::Query, message: op::Message) {
         self.cache.put(
             q,
             DNSEntry {
                 timestamp: Instant::now(),
-                response: rsp,
+                message,
             },
         );
         info!("cache size: {}", self.len());
