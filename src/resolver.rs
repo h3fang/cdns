@@ -94,15 +94,10 @@ impl Resolver {
         &self,
         url: &url::Url,
         q: &op::Query,
-        msg: &op::Message,
+        msg: Vec<u8>,
     ) -> Result<(String, op::Message), ResolveError> {
         info!("lookup {q} with {url}");
-        let rsp = self
-            .https_client
-            .post(url.clone())
-            .body(msg.to_vec()?)
-            .send()
-            .await?;
+        let rsp = self.https_client.post(url.clone()).body(msg).send().await?;
         trace!("query={q:?}, url={url}, response={rsp:?}");
         let bytes = rsp.error_for_status()?.bytes().await?;
         let msg = op::Message::from_vec(&bytes)?;
@@ -143,10 +138,13 @@ impl Resolver {
         let domain = q.name().to_utf8().to_lowercase();
         let recursive = self.config.is_recursive(&domain);
         let servers = self.config.match_rule(&domain);
+
+        let msg = msg.to_vec()?;
+
         let futures = servers
             .iter()
             .filter(|s| !recursive || s.resolved)
-            .map(|s| self.query_with_doh(&s.url, q, msg))
+            .map(|s| self.query_with_doh(&s.url, q, msg.clone()))
             .collect::<Vec<_>>();
 
         let mut buffered = stream::iter(futures).buffer_unordered(32);
