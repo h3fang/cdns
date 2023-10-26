@@ -1,8 +1,8 @@
 use std::time::Instant;
 
+use hickory_proto::op;
 use log::info;
 use lru::LruCache;
-use trust_dns_proto::op;
 
 struct DNSEntry {
     timestamp: Instant,
@@ -80,12 +80,12 @@ impl DNSCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{distributions::Alphanumeric, Rng};
-    use std::net::{Ipv4Addr, Ipv6Addr};
-    use trust_dns_proto::rr::{
+    use hickory_proto::rr::{
         self,
         rdata::{A, AAAA},
     };
+    use rand::{distributions::Alphanumeric, Rng};
+    use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn populate_cache() {

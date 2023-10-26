@@ -9,11 +9,10 @@ use ahash::AHashMap as HashMap;
 use log::{error, info, trace, warn};
 
 use futures::{stream, StreamExt};
+use hickory_proto::{error::ProtoError, op};
 use reqwest::header::{HeaderMap, HeaderValue};
 use tokio::sync::{watch, Mutex};
 use tokio::time::timeout;
-use trust_dns_proto::error::ProtoError;
-use trust_dns_proto::op;
 
 pub struct Resolver {
     config: Config,
@@ -206,7 +205,7 @@ impl Resolver {
 mod tests {
     use super::*;
     use futures::future::join_all;
-    use trust_dns_proto::rr;
+    use hickory_proto::rr;
 
     async fn resolve_domain(domain: &str, resolver: &Resolver) -> anyhow::Result<()> {
         let name = rr::Name::from_ascii(domain)

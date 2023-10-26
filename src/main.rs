@@ -6,9 +6,9 @@ mod server;
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
+use hickory_proto::op;
 use log::{error, info, warn};
 use tokio::net::UdpSocket;
-use trust_dns_proto::op;
 
 use config::Config;
 use resolver::Resolver;
