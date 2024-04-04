@@ -62,7 +62,7 @@ impl Resolver {
             .pool_idle_timeout(std::time::Duration::from_secs(5))
             .tcp_keepalive(Some(std::time::Duration::from_secs(5)))
             .https_only(true)
-            .no_trust_dns();
+            .no_hickory_dns();
 
         for s in config.groups.values().flatten() {
             if s.ips.is_empty() {
