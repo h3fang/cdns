@@ -57,13 +57,19 @@ async fn main() -> Result<()> {
             .recv_from(&mut buf)
             .await
             .context("Failed to read data from socket.")?;
-        let bytes = buf[..len].to_vec();
+        let msg = match op::Message::from_vec(&buf[..len]) {
+            Ok(msg) => msg,
+            Err(e) => {
+                error!("Failed to parse DNS message, {e}.");
+                continue;
+            }
+        };
 
         let sock = sock.clone();
         let resolver = resolver.clone();
 
         tokio::spawn(async move {
-            match resolver.resolve(bytes).await {
+            match resolver.resolve(msg).await {
                 Ok(rsp) => {
                     if let Err(e) = respond(&rsp, &sock, &addr).await {
                         error!("Failed to send response: {:?}.", e);

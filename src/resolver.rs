@@ -163,9 +163,7 @@ impl Resolver {
         Err(ResolveError::AllFailed)
     }
 
-    pub async fn resolve(&self, bytes: Vec<u8>) -> Result<op::Message, ResolveError> {
-        let mut msg = op::Message::from_vec(&bytes)?;
-
+    pub async fn resolve(&self, mut msg: op::Message) -> Result<op::Message, ResolveError> {
         // ensure there is one and only one query in DNS message
         let n = msg.queries().iter().count();
         if n != 1 {
@@ -209,19 +207,19 @@ mod tests {
         let name = rr::Name::from_ascii(domain)
             .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
+        let id = rand::random::<u16>();
         let mut msg = op::Message::new();
-        msg.set_id(rand::random::<u16>())
+        msg.set_id(id)
             .add_query(q.to_owned())
             .set_message_type(op::MessageType::Query)
             .set_recursion_desired(true);
-        let bytes = msg.to_vec()?;
 
         let r = resolver
-            .resolve(bytes)
+            .resolve(msg)
             .await
             .unwrap_or_else(|e| panic!("Failed to resolve, error: {e:?}"));
 
-        assert_eq!(msg.id(), r.id());
+        assert_eq!(id, r.id());
         assert_eq!(q, r.queries()[0]);
         r.answers().iter().for_each(|a| println!("{a}"));
         assert_eq!(name, *r.answers()[0].name());
