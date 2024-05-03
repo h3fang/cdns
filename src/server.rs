@@ -13,6 +13,14 @@ pub struct Server {
 }
 
 impl Server {
+    pub fn new(url: Url, ips: Vec<IpAddr>) -> Self {
+        Self {
+            url,
+            resolved: !ips.is_empty(),
+            ips,
+        }
+    }
+
     pub fn is_resolved(&self) -> bool {
         !self.ips.is_empty()
             || match self.url.host() {

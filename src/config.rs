@@ -78,41 +78,40 @@ impl Default for Config {
         groups.insert(
             "default".to_string(),
             vec![
-                Server {
-                    url: Url::parse("https://doh.pub/dns-query").unwrap(),
-                    ips: vec![],
-                    resolved: false,
-                },
-                Server {
-                    url: Url::parse("https://dns.alidns.com/dns-query").unwrap(),
-                    ips: vec![
+                Server::new(
+                    Url::parse("https://doh.pub/dns-query").unwrap(),
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(1, 12, 12, 12)),
+                        IpAddr::V4(Ipv4Addr::new(120, 53, 53, 53)),
+                    ],
+                ),
+                Server::new(
+                    Url::parse("https://dns.alidns.com/dns-query").unwrap(),
+                    vec![
                         IpAddr::V4(Ipv4Addr::new(223, 5, 5, 5)),
                         IpAddr::V4(Ipv4Addr::new(223, 6, 6, 6)),
                         IpAddr::V6(Ipv6Addr::new(0x2400, 0x3200, 0, 0, 0, 0, 0, 0x1)),
                         IpAddr::V6(Ipv6Addr::new(0x2400, 0x3200, 0xbaba, 0, 0, 0, 0, 0x1)),
                     ],
-                    resolved: true,
-                },
-                Server {
-                    url: Url::parse("https://cloudflare-dns.com/dns-query").unwrap(),
-                    ips: vec![
+                ),
+                Server::new(
+                    Url::parse("https://cloudflare-dns.com/dns-query").unwrap(),
+                    vec![
                         IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
                         IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1)),
                         IpAddr::V6(Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111)),
                         IpAddr::V6(Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1001)),
                     ],
-                    resolved: true,
-                },
-                Server {
-                    url: Url::parse("https://dns.google/dns-query").unwrap(),
-                    ips: vec![
+                ),
+                Server::new(
+                    Url::parse("https://dns.google/dns-query").unwrap(),
+                    vec![
                         IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
                         IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4)),
                         IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888)),
                         IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8844)),
                     ],
-                    resolved: true,
-                },
+                ),
             ],
         );
 
