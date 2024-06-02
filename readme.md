@@ -2,13 +2,11 @@
 
 A local DNS server to relay queries to public DNS-over-Https servers.
 
-# Usage
-
-Run `cdns /path/to/configuration.json`, it will listen on `127.0.0.1:53` for DNS queries. Then change the system DNS server to `127.0.0.1`.
-
 # Configuration
 
-The configuration file uses [JSON](https://www.json.org) format. It includes a `groups` object and a `rules` array.
+The configuration file uses [JSON](https://www.json.org) format. It includes an optional `address` string, a `groups` object and a `rules` array.
+
+The `address` string specifies the address the server will listening on. `127.0.0.1:53` will be used by default if it is not specified in the configuration file.
 
 Each key-value pair in `groups` specifies the group name and an array of servers. Each server consists of the URL of the DNS-over-HTTPS server and an optional array of well-known IPs for the server. The server URL should support POST for [RFC 8484](https://tools.ietf.org/html/rfc8484) UDP wire format.
 
@@ -76,3 +74,7 @@ If none of the rules matches the domain, the `default` group will be chosen if i
     ]
 }
 ```
+
+# Usage
+
+Run `cdns /path/to/configuration.json`, it will listen on the specified address for DNS queries.

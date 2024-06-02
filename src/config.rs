@@ -10,11 +10,17 @@ use crate::server::Server;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default = "default_address")]
+    pub address: String,
     pub groups: HashMap<String, Vec<Server>>,
     #[serde(default)]
     pub rules: Vec<(String, String)>,
     #[serde(skip)]
     unresolved_servers: HashSet<String>,
+}
+
+fn default_address() -> String {
+    "127.0.0.1:53".to_string()
 }
 
 impl Config {
@@ -116,6 +122,7 @@ impl Default for Config {
         );
 
         let mut config = Config {
+            address: default_address(),
             groups,
             rules: vec![],
             unresolved_servers: Default::default(),

@@ -41,13 +41,12 @@ async fn main() -> Result<()> {
         }
     };
 
-    let resolver = Arc::new(Resolver::new(config, 2048));
-
     let sock = Arc::new(
-        UdpSocket::bind("127.0.0.1:53")
+        UdpSocket::bind(&config.address)
             .await
-            .context("Failed to create and bind socket 127.0.0.1:53")?,
+            .context(format!("Failed to bind socket to {}", config.address))?,
     );
+    let resolver = Arc::new(Resolver::new(config, 2048));
 
     // maximum size of the DNS message, from https://datatracker.ietf.org/doc/html/rfc8484#section-6
     let mut buf = vec![0u8; 65535];
