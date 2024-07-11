@@ -2,14 +2,14 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
-use std::result::Result;
 use std::time::Duration;
 
 use ahash::AHashMap as HashMap;
+use anyhow::Result;
 use log::{error, info, trace, warn};
 
 use futures::{stream, StreamExt};
-use hickory_proto::{error::ProtoError, op};
+use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
 use tokio::sync::{watch, Mutex};
 use tokio::time::timeout;
@@ -19,28 +19,6 @@ pub struct Resolver {
     https_client: reqwest::Client,
     cache: Mutex<DNSCache>,
     ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
-}
-
-#[derive(Debug)]
-pub enum ResolveError {
-    // Https error.
-    Reqwest(reqwest::Error),
-    // Failed to deserialize server response.
-    Proto(ProtoError),
-    // All servers failed to give valid response.
-    AllFailed,
-}
-
-impl From<reqwest::Error> for ResolveError {
-    fn from(err: reqwest::Error) -> ResolveError {
-        ResolveError::Reqwest(err)
-    }
-}
-
-impl From<ProtoError> for ResolveError {
-    fn from(err: ProtoError) -> ResolveError {
-        ResolveError::Proto(err)
-    }
 }
 
 impl Resolver {
@@ -95,7 +73,7 @@ impl Resolver {
         url: &url::Url,
         q: &op::Query,
         msg: Vec<u8>,
-    ) -> Result<(String, op::Message), ResolveError> {
+    ) -> Result<(String, op::Message)> {
         info!("lookup {q} with {url}");
         let rsp = self.https_client.post(url.clone()).body(msg).send().await?;
         trace!("query={q:?}, url={url}, response={rsp:?}");
@@ -104,11 +82,7 @@ impl Resolver {
         Ok((url.to_string(), msg))
     }
 
-    pub async fn query(
-        &self,
-        q: &op::Query,
-        msg: &op::Message,
-    ) -> Result<op::Message, ResolveError> {
+    pub async fn query(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
         // query is ongoing, wait for the result
         if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() } {
             if let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await {
@@ -160,10 +134,10 @@ impl Resolver {
         }
 
         self.ongoing.lock().await.remove(q);
-        Err(ResolveError::AllFailed)
+        Err(anyhow::anyhow!("All servers failed"))
     }
 
-    pub async fn resolve(&self, mut msg: op::Message) -> Result<op::Message, ResolveError> {
+    pub async fn resolve(&self, mut msg: op::Message) -> Result<op::Message> {
         // ensure there is one and only one query in DNS message
         let n = msg.queries().iter().count();
         if n != 1 {
