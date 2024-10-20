@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use hickory_proto::op;
-use tracing::info;
 use lru::LruCache;
+use tracing::info;
 
 struct DNSEntry {
     timestamp: Instant,

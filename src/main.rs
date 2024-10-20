@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use hickory_proto::op;
 use tokio::net::UdpSocket;
 use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
 
 use config::Config;
 use resolver::Resolver;
@@ -31,6 +32,7 @@ async fn main() -> Result<()> {
         .with_file(true)
         .with_line_number(true)
         .without_time()
+        .with_env_filter(EnvFilter::from_default_env())
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
