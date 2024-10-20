@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
-use log::{error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use futures::{stream, StreamExt};
 use hickory_proto::op;

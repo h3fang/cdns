@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use hickory_proto::op;
-use log::info;
+use tracing::info;
 use lru::LruCache;
 
 struct DNSEntry {

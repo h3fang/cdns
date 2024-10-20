@@ -7,8 +7,8 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
 use hickory_proto::op;
-use log::{error, info, warn};
 use tokio::net::UdpSocket;
+use tracing::{error, info, warn};
 
 use config::Config;
 use resolver::Resolver;
@@ -26,10 +26,13 @@ async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) -> Resu
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
-    let env = env_logger::Env::default().default_filter_or("info");
-    env_logger::Builder::from_env(env)
-        .format_timestamp_micros()
-        .init();
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_file(true)
+        .with_line_number(true)
+        .without_time()
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
 
     let config = match std::env::args().nth(1) {
         Some(path) => {
