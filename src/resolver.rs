@@ -205,7 +205,7 @@ mod tests {
         let resolver = Resolver::new(config, 2048);
 
         // Alexa Top 10
-        let domains = vec![
+        let domains = [
             "google.com.",
             "youtube.com.",
             "tmall.com.",
