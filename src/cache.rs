@@ -84,16 +84,16 @@ mod tests {
         self,
         rdata::{A, AAAA},
     };
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{distr::Alphanumeric, Rng};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn populate_cache() {
         let n = 4096;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut cache = DNSCache::new(n);
         for i in 0..n {
-            let domain = rand::thread_rng()
+            let domain = rand::rng()
                 .sample_iter(&Alphanumeric)
                 .take(16)
                 .map(char::from)
@@ -104,7 +104,7 @@ mod tests {
             let mut msg = op::Message::new();
             msg.set_message_type(op::MessageType::Response);
             let type_a = rand::random::<bool>();
-            for _ in 0..(rng.gen_range(1..5)) {
+            for _ in 0..(rng.random_range(1..5)) {
                 let rdata = if type_a {
                     rr::RData::A(A(Ipv4Addr::from(rand::random::<u32>())))
                 } else {
