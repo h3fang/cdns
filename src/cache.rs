@@ -84,7 +84,7 @@ mod tests {
         self,
         rdata::{A, AAAA},
     };
-    use rand::{distr::Alphanumeric, Rng};
+    use rand::{Rng, distr::Alphanumeric};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]

@@ -3,7 +3,7 @@ name = "cdns"
 description = "Concurrent DNS-over-Https resolver."
 version = "0.8.1"
 authors = ["Fang He <hf.enigma@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

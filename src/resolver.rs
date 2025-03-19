@@ -8,10 +8,10 @@ use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use tracing::{error, info, trace, warn};
 
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{Mutex, watch};
 use tokio::time::timeout;
 
 pub struct Resolver {
