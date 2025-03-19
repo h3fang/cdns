@@ -16,7 +16,7 @@ lru = "0.13"
 
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
-hickory-proto = "0.24"
+hickory-proto = "0.25"
 reqwest = { version = "0.12", features = ["stream"] }
 tokio = { version = "1.44", features = [
     "rt-multi-thread",

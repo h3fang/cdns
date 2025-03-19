@@ -209,13 +209,13 @@ mod tests {
             "google.com.",
             "youtube.com.",
             "tmall.com.",
-            "qq.com",
-            "baidu.com",
-            "sohu.com",
-            "facebook.com",
-            "taobao.com",
-            "360.cn",
-            "jd.com",
+            "qq.com.",
+            "baidu.com.",
+            "sohu.com.",
+            "facebook.com.",
+            "taobao.com.",
+            "360.cn.",
+            "jd.com.",
         ];
 
         join_all(
