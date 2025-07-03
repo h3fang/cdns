@@ -12,13 +12,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 ahash = { version = "0.8", features = ["serde"] }
-lru = "0.15"
+lru = "0.16"
 
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
 hickory-proto = "0.25"
 reqwest = { version = "0.12", features = ["stream", "rustls-tls-native-roots"] }
-tokio = { version = "1.45", features = [
+tokio = { version = "1.46", features = [
     "rt-multi-thread",
     "sync",
     "net",
