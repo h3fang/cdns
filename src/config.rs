@@ -61,11 +61,10 @@ impl Config {
     pub fn match_rule(&self, domain: &str) -> &Vec<Server> {
         let domain = domain.trim_end_matches('.');
         for (rule, group) in &self.rules {
-            if let Some(r) = domain.strip_suffix(rule) {
-                if r.is_empty() || r.ends_with('.') {
+            if let Some(r) = domain.strip_suffix(rule)
+                && (r.is_empty() || r.ends_with('.')) {
                     return self.groups.get(group).unwrap();
                 }
-            }
         }
         self.groups
             .get("default")
