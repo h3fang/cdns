@@ -85,9 +85,10 @@ impl Resolver {
     pub async fn query(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
         // query is ongoing, wait for the result
         if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() }
-            && let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await {
-                return Ok(rx.borrow().clone());
-            }
+            && let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await
+        {
+            return Ok(rx.borrow().clone());
+        }
 
         // try to get response from cache
         {

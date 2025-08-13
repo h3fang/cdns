@@ -62,9 +62,10 @@ impl Config {
         let domain = domain.trim_end_matches('.');
         for (rule, group) in &self.rules {
             if let Some(r) = domain.strip_suffix(rule)
-                && (r.is_empty() || r.ends_with('.')) {
-                    return self.groups.get(group).unwrap();
-                }
+                && (r.is_empty() || r.ends_with('.'))
+            {
+                return self.groups.get(group).unwrap();
+            }
         }
         self.groups
             .get("default")
