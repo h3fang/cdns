@@ -44,16 +44,19 @@ impl DNSCache {
                         a.set_ttl(remaining);
                     });
                     info!("Cache hit, {q}");
-                    return Some(msg);
+                    Some(msg)
                 } else {
-                    info!("Cache invalid, {q}");
+                    self.cache.pop(q);
+                    info!("Cache expired, {q}");
+                    info!("cache size: {}", self.len());
+                    None
                 }
             }
             None => {
                 info!("Cache miss, {q}");
+                None
             }
         }
-        None
     }
 
     pub fn put(&mut self, q: op::Query, message: op::Message) {
@@ -64,11 +67,6 @@ impl DNSCache {
                 message,
             },
         );
-        info!("cache size: {}", self.len());
-    }
-
-    pub fn pop(&mut self, q: &op::Query) {
-        self.cache.pop(q);
         info!("cache size: {}", self.len());
     }
 

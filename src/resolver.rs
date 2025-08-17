@@ -88,19 +88,8 @@ impl Resolver {
         }
 
         // try to get response from cache
-        {
-            let mut cache = self.cache.lock().await;
-            match cache.get(q) {
-                Some(mut rsp) => {
-                    if let Some(edns) = msg.extensions() {
-                        rsp.set_edns(edns.clone());
-                    }
-                    return Ok(rsp);
-                }
-                None => {
-                    cache.pop(q);
-                }
-            }
+        if let Some(rsp) = self.cache.lock().await.get(q) {
+            return Ok(rsp);
         }
 
         // query the remote servers
