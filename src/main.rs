@@ -14,17 +14,6 @@ use tracing_subscriber::EnvFilter;
 use config::Config;
 use resolver::Resolver;
 
-async fn respond(msg: &op::Message, sock: &UdpSocket, addr: &SocketAddr) -> Result<()> {
-    let bytes = msg.to_vec()?;
-    sock.send_to(&bytes, addr)
-        .await
-        .context("Failed to send DNS response packet.")?;
-    for ans in msg.answers() {
-        info!("{ans}");
-    }
-    Ok(())
-}
-
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     let subscriber = tracing_subscriber::fmt()
@@ -73,14 +62,22 @@ async fn main() -> Result<()> {
         let resolver = resolver.clone();
 
         tokio::spawn(async move {
-            match resolver.resolve(msg).await {
-                Ok(rsp) => {
-                    if let Err(e) = respond(&rsp, &sock, &addr).await {
-                        error!("Failed to send response: {:?}.", e);
-                    }
-                }
-                Err(e) => error!("Failed to resolve: {:?}.", e),
+            if let Err(e) = handle_query(msg, &sock, &addr, &resolver).await {
+                error!("{}", e.backtrace());
             }
         });
     }
+}
+
+async fn handle_query(
+    msg: op::Message,
+    sock: &UdpSocket,
+    addr: &SocketAddr,
+    resolver: &Resolver,
+) -> Result<()> {
+    let msg = resolver.resolve(msg).await?;
+    let bytes = msg.to_vec()?;
+    sock.send_to(&bytes, addr).await?;
+    info!("{:?}", msg.answers());
+    Ok(())
 }
