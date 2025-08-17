@@ -1,8 +1,7 @@
 use crate::cache::DNSCache;
 use crate::config::Config;
 
-use std::net::SocketAddr;
-use std::time::Duration;
+use std::{net::SocketAddr, sync::Arc};
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
@@ -11,14 +10,13 @@ use tracing::{error, info, trace, warn};
 use futures::{StreamExt, stream};
 use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::{Mutex, watch};
-use tokio::time::timeout;
+use tokio::sync::{Mutex, Notify};
 
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
     cache: Mutex<DNSCache>,
-    ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
+    ongoing: Mutex<HashMap<op::Query, Arc<Notify>>>,
 }
 
 impl Resolver {
@@ -84,10 +82,9 @@ impl Resolver {
 
     pub async fn query(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
         // query is ongoing, wait for the result
-        if let Some(mut rx) = { self.ongoing.lock().await.get(q).cloned() }
-            && let Ok(Ok(())) = timeout(Duration::from_secs(3), rx.changed()).await
-        {
-            return Ok(rx.borrow().clone());
+        let notify = self.ongoing.lock().await.get(q).cloned();
+        if let Some(notify) = notify {
+            notify.notified().await;
         }
 
         // try to get response from cache
@@ -106,9 +103,23 @@ impl Resolver {
             }
         }
 
-        let (tx, rx) = watch::channel(op::Message::new());
-        self.ongoing.lock().await.insert(q.clone(), rx);
+        // query the remote servers
+        let notify = Arc::new(Notify::new());
+        self.ongoing.lock().await.insert(q.clone(), notify.clone());
 
+        let result = self.get_fastest_response(q, msg).await;
+
+        if let Ok(rsp) = result.as_ref() {
+            self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
+        }
+
+        self.ongoing.lock().await.remove(q);
+        notify.notify_waiters();
+
+        result
+    }
+
+    async fn get_fastest_response(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
         let domain = q.name().to_utf8().to_lowercase();
         let recursive = self.config.is_recursive(&domain);
         let servers = self.config.match_rule(&domain);
@@ -126,14 +137,10 @@ impl Resolver {
         while let Some(r) = buffered.next().await {
             if let Ok((url, rsp)) = r {
                 info!("Fastest response from {url}");
-                self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
-                let _ = tx.send(rsp.clone());
-                self.ongoing.lock().await.remove(q);
                 return Ok(rsp);
             }
         }
 
-        self.ongoing.lock().await.remove(q);
         Err(anyhow::anyhow!("All servers failed"))
     }
 
