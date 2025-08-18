@@ -1,7 +1,8 @@
 use crate::cache::DNSCache;
 use crate::config::Config;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
@@ -10,13 +11,13 @@ use tracing::{error, info, trace, warn};
 use futures::{StreamExt, stream};
 use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
-    cache: Mutex<DNSCache>,
-    ongoing: Mutex<HashMap<op::Query, Arc<Notify>>>,
+    cache: std::sync::Mutex<DNSCache>,
+    ongoing: tokio::sync::Mutex<HashMap<op::Query, Arc<Notify>>>,
 }
 
 impl Resolver {
@@ -61,7 +62,7 @@ impl Resolver {
         Resolver {
             config,
             https_client,
-            cache: Mutex::new(DNSCache::new(cache_size)),
+            cache: std::sync::Mutex::new(DNSCache::new(cache_size)),
             ongoing: Default::default(),
         }
     }
@@ -92,7 +93,7 @@ impl Resolver {
         }
 
         // try to get response from cache
-        if let Some(rsp) = self.cache.lock().await.get(q) {
+        if let Some(rsp) = self.cache.lock().unwrap().get(q) {
             return Ok(rsp);
         }
 
@@ -103,7 +104,7 @@ impl Resolver {
         let result = self.get_fastest_response(q, msg).await;
 
         if let Ok(rsp) = result.as_ref() {
-            self.cache.lock().await.put(q.to_owned(), rsp.to_owned());
+            self.cache.lock().unwrap().put(q.to_owned(), rsp.to_owned());
         }
 
         self.ongoing.lock().await.remove(q);
