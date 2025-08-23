@@ -2,7 +2,7 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
@@ -16,8 +16,8 @@ use tokio::sync::Notify;
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
-    cache: std::sync::Mutex<DNSCache>,
-    ongoing: tokio::sync::Mutex<HashMap<op::Query, Arc<Notify>>>,
+    cache: Mutex<DNSCache>,
+    ongoing: Mutex<HashMap<op::Query, Arc<Notify>>>,
 }
 
 impl Resolver {
@@ -62,7 +62,7 @@ impl Resolver {
         Resolver {
             config,
             https_client,
-            cache: std::sync::Mutex::new(DNSCache::new(cache_size)),
+            cache: Mutex::new(DNSCache::new(cache_size)),
             ongoing: Default::default(),
         }
     }
@@ -82,14 +82,14 @@ impl Resolver {
     }
 
     pub async fn query(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
-        {
-            let ongoing = self.ongoing.lock().await;
-            // query is ongoing, wait for the result
-            if let Some(notify) = ongoing.get(q).cloned() {
-                let notified = notify.notified();
-                drop(ongoing);
-                notified.await;
-            }
+        let notified = self
+            .ongoing
+            .lock()
+            .unwrap()
+            .get(q)
+            .map(|n| n.clone().notified_owned());
+        if let Some(notified) = notified {
+            notified.await;
         }
 
         // try to get response from cache
@@ -99,7 +99,10 @@ impl Resolver {
 
         // query the remote servers
         let notify = Arc::new(Notify::new());
-        self.ongoing.lock().await.insert(q.clone(), notify.clone());
+        self.ongoing
+            .lock()
+            .unwrap()
+            .insert(q.clone(), notify.clone());
 
         let result = self.get_fastest_response(q, msg).await;
 
@@ -107,7 +110,7 @@ impl Resolver {
             self.cache.lock().unwrap().put(q.to_owned(), rsp.to_owned());
         }
 
-        self.ongoing.lock().await.remove(q);
+        self.ongoing.lock().unwrap().remove(q);
         notify.notify_waiters();
 
         result
