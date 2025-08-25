@@ -2,7 +2,7 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
@@ -11,13 +11,13 @@ use tracing::{error, info, trace, warn};
 use futures::{StreamExt, stream};
 use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::Notify;
+use tokio::sync::watch;
 
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
     cache: Mutex<DNSCache>,
-    ongoing: Mutex<HashMap<op::Query, Arc<Notify>>>,
+    ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
 }
 
 impl Resolver {
@@ -81,39 +81,44 @@ impl Resolver {
         Ok((url.to_string(), msg))
     }
 
-    pub async fn query(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
-        let notified = self
-            .ongoing
-            .lock()
-            .unwrap()
-            .get(q)
-            .map(|n| n.clone().notified_owned());
-        if let Some(notified) = notified {
-            notified.await;
-        }
-
+    pub async fn query(&self, q: &op::Query, mut msg: op::Message) -> op::Message {
         // try to get response from cache
         if let Some(rsp) = self.cache.lock().unwrap().get(q) {
-            return Ok(rsp);
+            return rsp;
         }
 
         // query the remote servers
-        let notify = Arc::new(Notify::new());
-        self.ongoing
-            .lock()
-            .unwrap()
-            .insert(q.clone(), notify.clone());
+        let rx = self.ongoing.lock().unwrap().get(q).cloned();
+        if let Some(mut rx) = rx {
+            // This method returns an error if and only if the [`Sender`] is dropped,
+            // which is fine, since `tx.send()` is called before drop.
+            let _ = rx.changed().await;
+            rx.borrow().clone()
+        } else {
+            let (tx, rx) = watch::channel(op::Message::new());
+            self.ongoing.lock().unwrap().insert(q.clone(), rx);
 
-        let result = self.get_fastest_response(q, msg).await;
+            let result = self.get_fastest_response(q, &msg).await;
+            let rsp = match result {
+                Ok(rsp) => {
+                    self.cache.lock().unwrap().put(q.to_owned(), rsp.clone());
+                    rsp
+                }
+                Err(e) => {
+                    error!("Failed to resolve for {q}, error: {e:?}");
+                    msg.set_message_type(op::MessageType::Response)
+                        .set_response_code(op::ResponseCode::ServFail);
+                    msg
+                }
+            };
 
-        if let Ok(rsp) = result.as_ref() {
-            self.cache.lock().unwrap().put(q.to_owned(), rsp.to_owned());
+            self.ongoing.lock().unwrap().remove(q);
+
+            // This method fails if the channel is closed (no receiver), which is fine.
+            let _ = tx.send(rsp.clone());
+
+            rsp
         }
-
-        self.ongoing.lock().unwrap().remove(q);
-        notify.notify_waiters();
-
-        result
     }
 
     async fn get_fastest_response(&self, q: &op::Query, msg: &op::Message) -> Result<op::Message> {
@@ -141,14 +146,14 @@ impl Resolver {
         Err(anyhow::anyhow!("All servers failed"))
     }
 
-    pub async fn resolve(&self, mut msg: op::Message) -> Result<op::Message> {
+    pub async fn resolve(&self, mut msg: op::Message) -> op::Message {
         // ensure there is one and only one query in DNS message
         let n = msg.queries().iter().count();
         if n != 1 {
             warn!("{n} question(s) found in DNS query datagram.");
             msg.set_message_type(op::MessageType::Response)
                 .set_response_code(op::ResponseCode::FormErr);
-            return Ok(msg);
+            return msg;
         }
         let q = msg.queries()[0].to_owned();
 
@@ -164,14 +169,9 @@ impl Resolver {
         msg.set_id(0);
 
         // resolve from multiple DNS servers
-        let mut rsp = self.query(&q, &msg).await.unwrap_or_else(|e| {
-            error!("Failed to resolve for {q}, error: {e:?}");
-            msg.set_message_type(op::MessageType::Response)
-                .set_response_code(op::ResponseCode::FormErr);
-            msg
-        });
+        let mut rsp = self.query(&q, msg).await;
         rsp.set_id(id);
-        Ok(rsp)
+        rsp
     }
 }
 
@@ -192,10 +192,7 @@ mod tests {
             .set_message_type(op::MessageType::Query)
             .set_recursion_desired(true);
 
-        let r = resolver
-            .resolve(msg)
-            .await
-            .unwrap_or_else(|e| panic!("Failed to resolve, error: {e:?}"));
+        let r = resolver.resolve(msg).await;
 
         assert_eq!(id, r.id());
         assert_eq!(q, r.queries()[0]);

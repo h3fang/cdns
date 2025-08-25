@@ -75,7 +75,7 @@ async fn handle_query(
     addr: &SocketAddr,
     resolver: &Resolver,
 ) -> Result<()> {
-    let msg = resolver.resolve(msg).await?;
+    let msg = resolver.resolve(msg).await;
     let bytes = msg.to_vec()?;
     sock.send_to(&bytes, addr).await?;
     info!("{:?}", msg.answers());
