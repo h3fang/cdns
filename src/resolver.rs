@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
+use bytes::Bytes;
 use tracing::{error, info, trace, warn};
 
 use futures::{StreamExt, stream};
@@ -71,7 +72,7 @@ impl Resolver {
         &self,
         url: &url::Url,
         q: &op::Query,
-        msg: Vec<u8>,
+        msg: Bytes,
     ) -> Result<(String, op::Message)> {
         info!("lookup {q} with {url}");
         let rsp = self.https_client.post(url.clone()).body(msg).send().await?;
@@ -126,7 +127,7 @@ impl Resolver {
         let recursive = self.config.is_recursive(&domain);
         let servers = self.config.match_rule(&domain);
 
-        let msg = msg.to_vec()?;
+        let msg = Bytes::from(msg.to_vec()?);
 
         let futures = servers
             .iter()

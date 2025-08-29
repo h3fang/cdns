@@ -123,6 +123,7 @@ version = "0.10.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "bytes",
  "futures",
  "hickory-proto",
  "lru",
