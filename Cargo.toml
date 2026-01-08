@@ -17,7 +17,7 @@ lru = "0.16"
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
 hickory-proto = "0.25"
-reqwest = { version = "0.12", features = ["stream", "rustls-tls-native-roots"] }
+reqwest = { version = "0.13", features = ["stream"] }
 tokio = { version = "1.48", features = [
     "rt-multi-thread",
     "sync",
@@ -25,7 +25,7 @@ tokio = { version = "1.48", features = [
     "macros",
     "time",
 ] }
-bytes = "1.10"
+bytes = "1.11"
 
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
