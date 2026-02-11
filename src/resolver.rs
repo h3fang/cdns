@@ -17,7 +17,7 @@ use tokio::sync::watch;
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
-    cache: Mutex<DNSCache>,
+    cache: DNSCache,
     ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
 }
 
@@ -63,7 +63,7 @@ impl Resolver {
         Resolver {
             config,
             https_client,
-            cache: Mutex::new(DNSCache::new(cache_size)),
+            cache: DNSCache::new(cache_size),
             ongoing: Default::default(),
         }
     }
@@ -84,7 +84,7 @@ impl Resolver {
 
     pub async fn query(&self, q: &op::Query, mut msg: op::Message) -> op::Message {
         // try to get response from cache
-        if let Some(rsp) = self.cache.lock().unwrap().get(q) {
+        if let Some(rsp) = self.cache.get(q) {
             return rsp;
         }
 
@@ -102,7 +102,7 @@ impl Resolver {
             let result = self.get_fastest_response(q, &msg).await;
             let rsp = match result {
                 Ok(rsp) => {
-                    self.cache.lock().unwrap().put(q.to_owned(), rsp.clone());
+                    self.cache.insert(q.to_owned(), rsp.clone());
                     rsp
                 }
                 Err(e) => {

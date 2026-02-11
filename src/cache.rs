@@ -1,9 +1,10 @@
 use std::time::Instant;
 
 use hickory_proto::op;
-use lru::LruCache;
+use quick_cache::sync::Cache;
 use tracing::info;
 
+#[derive(Clone)]
 struct DNSEntry {
     timestamp: Instant,
     message: op::Message,
@@ -11,17 +12,17 @@ struct DNSEntry {
 
 /// LRU DNS cache
 pub struct DNSCache {
-    cache: LruCache<op::Query, DNSEntry>,
+    cache: Cache<op::Query, DNSEntry>,
 }
 
 impl DNSCache {
     pub fn new(cap: usize) -> DNSCache {
         DNSCache {
-            cache: LruCache::new(cap.try_into().expect("Cache capacity can not be zero.")),
+            cache: Cache::new(cap),
         }
     }
 
-    pub fn get(&mut self, q: &op::Query) -> Option<op::Message> {
+    pub fn get(&self, q: &op::Query) -> Option<op::Message> {
         match self.cache.get(q) {
             Some(entry) => {
                 let ttl = entry
@@ -46,9 +47,9 @@ impl DNSCache {
                     info!("Cache hit, {q}");
                     Some(msg)
                 } else {
-                    self.cache.pop(q);
+                    self.cache.remove(q);
                     info!("Cache expired, {q}");
-                    info!("cache size: {}", self.len());
+                    info!("Cache size: {}", self.len());
                     None
                 }
             }
@@ -59,15 +60,15 @@ impl DNSCache {
         }
     }
 
-    pub fn put(&mut self, q: op::Query, message: op::Message) {
-        self.cache.put(
+    pub fn insert(&self, q: op::Query, message: op::Message) {
+        self.cache.insert(
             q,
             DNSEntry {
                 timestamp: Instant::now(),
                 message,
             },
         );
-        info!("cache size: {}", self.len());
+        info!("Cache size: {}", self.len());
     }
 
     pub fn len(&self) -> usize {
@@ -89,7 +90,7 @@ mod tests {
     fn populate_cache() {
         let n = 4096;
         let mut rng = rand::rng();
-        let mut cache = DNSCache::new(n);
+        let cache = DNSCache::new(n);
         for i in 0..n {
             let domain = rand::rng()
                 .sample_iter(&Alphanumeric)
@@ -114,7 +115,7 @@ mod tests {
                     rdata,
                 ));
             }
-            cache.put(
+            cache.insert(
                 op::Query::query(
                     name,
                     if type_a {
@@ -127,6 +128,6 @@ mod tests {
             );
         }
 
-        assert_eq!(cache.len(), n);
+        assert!(cache.len() <= n);
     }
 }

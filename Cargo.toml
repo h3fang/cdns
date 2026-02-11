@@ -12,7 +12,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 ahash = { version = "0.8", features = ["serde"] }
-lru = "0.16"
+quick_cache = "0.6"
 
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
