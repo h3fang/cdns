@@ -2,22 +2,23 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
+use ahash::HashMap;
 use anyhow::Result;
 use bytes::Bytes;
-use dashmap::DashMap;
+use tokio::sync::{Mutex, broadcast};
 use tracing::{error, info, trace, warn};
 
 use futures::{StreamExt, stream};
 use hickory_proto::op;
 use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::watch;
 
 pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
     cache: DNSCache,
-    ongoing: DashMap<op::Query, watch::Receiver<op::Message>>,
+    ongoing: Arc<Mutex<HashMap<op::Query, broadcast::Sender<op::Message>>>>,
 }
 
 impl Resolver {
@@ -63,7 +64,7 @@ impl Resolver {
             config,
             https_client,
             cache: DNSCache::new(cache_size),
-            ongoing: Default::default(),
+            ongoing: Arc::new(Mutex::new(Default::default())),
         }
     }
 
@@ -82,42 +83,66 @@ impl Resolver {
     }
 
     pub async fn query(&self, q: &op::Query, mut msg: op::Message) -> op::Message {
-        // try to get response from cache
+        // Try to get response from cache first
         if let Some(rsp) = self.cache.get(q) {
             return rsp;
         }
 
-        // query the remote servers
-        let rx = self.ongoing.get(q).map(|r| r.value().clone());
-        if let Some(mut rx) = rx {
-            // This method returns an error if and only if the [`Sender`] is dropped,
-            // which is fine, since `tx.send()` is called before drop.
-            let _ = rx.changed().await;
-            rx.borrow().clone()
-        } else {
-            let (tx, rx) = watch::channel(op::Message::new());
-            self.ongoing.insert(q.clone(), rx);
+        // Try to subscribe to an existing query or start a new one
+        let (mut rx, sender) = {
+            // It is important that we keep the Mutex locked until we insert into it.
+            // Otherwise there may be multiple queries inserting for the same query.
+            let mut ongoing = self.ongoing.lock().await;
+            match ongoing.get(q).map(|ongoing| ongoing.subscribe()) {
+                Some(rx) => {
+                    // Another task is already handling this query
+                    (rx, None)
+                }
+                None => {
+                    // We're the first to query this, create a new entry
+                    let (tx, rx) = broadcast::channel(1);
+                    ongoing.insert(q.clone(), tx.clone());
+                    (rx, Some(tx))
+                }
+            }
+        };
 
+        // If we're the first one, perform the query
+        if let Some(sender) = sender {
             let result = self.get_fastest_response(q, &msg).await;
+
             let rsp = match result {
                 Ok(rsp) => {
                     self.cache.insert(q.to_owned(), rsp.clone());
                     rsp
                 }
                 Err(e) => {
-                    error!("Failed to resolve for {q}, error: {e:?}");
+                    error!("Resolve for {q} failed with error: {e}");
                     msg.set_message_type(op::MessageType::Response)
                         .set_response_code(op::ResponseCode::ServFail);
                     msg
                 }
             };
 
-            self.ongoing.remove(q);
+            // An unsuccessful send would be one where all associated Receiver handles
+            // have already been dropped, which is fine.
+            let _ = sender.send(rsp.clone());
 
-            // This method fails if the channel is closed (no receiver), which is fine.
-            let _ = tx.send(rsp.clone());
+            self.ongoing.lock().await.remove(q);
+            return rsp;
+        }
 
-            rsp
+        match rx.recv().await {
+            Ok(rsp) => rsp,
+            Err(e) => {
+                // Channel closed without sending - this shouldn't happen normally
+                // but we handle it gracefully by returning a ServFail
+                // Or lagged - this shouldn't happen with capacity 1, but we handle it
+                error!("Query channel for {q} failed with error {e}");
+                msg.set_message_type(op::MessageType::Response)
+                    .set_response_code(op::ResponseCode::ServFail);
+                msg
+            }
         }
     }
 
@@ -241,6 +266,6 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn request_coalescing() {
-        resolve_domains(10).await;
+        resolve_domains(100).await;
     }
 }
