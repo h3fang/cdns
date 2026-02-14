@@ -2,11 +2,10 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
-use std::sync::Mutex;
 
-use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use bytes::Bytes;
+use dashmap::DashMap;
 use tracing::{error, info, trace, warn};
 
 use futures::{StreamExt, stream};
@@ -18,7 +17,7 @@ pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
     cache: DNSCache,
-    ongoing: Mutex<HashMap<op::Query, watch::Receiver<op::Message>>>,
+    ongoing: DashMap<op::Query, watch::Receiver<op::Message>>,
 }
 
 impl Resolver {
@@ -89,7 +88,7 @@ impl Resolver {
         }
 
         // query the remote servers
-        let rx = self.ongoing.lock().unwrap().get(q).cloned();
+        let rx = self.ongoing.get(q).map(|r| r.value().clone());
         if let Some(mut rx) = rx {
             // This method returns an error if and only if the [`Sender`] is dropped,
             // which is fine, since `tx.send()` is called before drop.
@@ -97,7 +96,7 @@ impl Resolver {
             rx.borrow().clone()
         } else {
             let (tx, rx) = watch::channel(op::Message::new());
-            self.ongoing.lock().unwrap().insert(q.clone(), rx);
+            self.ongoing.insert(q.clone(), rx);
 
             let result = self.get_fastest_response(q, &msg).await;
             let rsp = match result {
@@ -113,7 +112,7 @@ impl Resolver {
                 }
             };
 
-            self.ongoing.lock().unwrap().remove(q);
+            self.ongoing.remove(q);
 
             // This method fails if the channel is closed (no receiver), which is fine.
             let _ = tx.send(rsp.clone());
