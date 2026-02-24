@@ -205,12 +205,15 @@ mod tests {
     use super::*;
     use futures::future::join_all;
     use hickory_proto::rr;
+    use std::sync::atomic::{AtomicU16, Ordering};
+
+    static QUERY_ID: AtomicU16 = AtomicU16::new(0);
 
     async fn resolve_domain(domain: &str, resolver: &Resolver) -> anyhow::Result<()> {
         let name = rr::Name::from_ascii(domain)
             .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
-        let id = rand::random::<u16>();
+        let id = QUERY_ID.fetch_add(1, Ordering::Relaxed);
         let mut msg = op::Message::new();
         msg.set_id(id)
             .add_query(q.to_owned())
