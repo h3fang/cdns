@@ -229,7 +229,7 @@ mod tests {
 
         assert_eq!(id, r.id());
         assert_eq!(q, r.queries()[0]);
-        r.answers().iter().for_each(|a| println!("{a}"));
+        assert!(!r.answers().is_empty());
         assert_eq!(name, *r.answers()[0].name());
         Ok(())
     }
