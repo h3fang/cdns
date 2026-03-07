@@ -135,9 +135,15 @@ impl Resolver {
         match rx.recv().await {
             Ok(rsp) => rsp,
             Err(e) => {
-                // Channel closed without sending - this shouldn't happen normally
-                // but we handle it gracefully by returning a ServFail
-                // Or lagged - this shouldn't happen with capacity 1, but we handle it
+                // `Err(RecvError::Closed)` is returned when all Sender halves have dropped.
+                // This shouldn't happen normally.
+
+                // `Err(RecvError::Lagged)` is returned when the Receiver handle falls behind.
+                // Once the channel is full, newly sent values will overwrite old values.
+                // At this point, a call to recv will return with Err(RecvError::Lagged).
+                // This shouldn't happen with capacity 1 channel.
+
+                // Anyway, we handle it gracefully by returning a `ServFail`.
                 error!("Query channel for {q} failed with error {e}");
                 msg.set_message_type(op::MessageType::Response)
                     .set_response_code(op::ResponseCode::ServFail);
