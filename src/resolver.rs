@@ -2,9 +2,8 @@ use crate::cache::DNSCache;
 use crate::config::Config;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 
-use ahash::HashMap;
+use ahash::{HashMap, HashMapExt};
 use anyhow::Result;
 use bytes::Bytes;
 use tokio::sync::{Mutex, broadcast};
@@ -18,7 +17,7 @@ pub struct Resolver {
     config: Config,
     https_client: reqwest::Client,
     cache: DNSCache,
-    ongoing: Arc<Mutex<HashMap<op::Query, broadcast::Sender<op::Message>>>>,
+    ongoing: Mutex<HashMap<op::Query, broadcast::Sender<op::Message>>>,
 }
 
 impl Resolver {
@@ -64,7 +63,7 @@ impl Resolver {
             config,
             https_client,
             cache: DNSCache::new(cache_size),
-            ongoing: Arc::new(Mutex::new(Default::default())),
+            ongoing: Mutex::new(HashMap::with_capacity(128)),
         }
     }
 
@@ -93,7 +92,7 @@ impl Resolver {
             // It is important that we keep the Mutex locked until we insert into it.
             // Otherwise there may be multiple queries inserting for the same query.
             let mut ongoing = self.ongoing.lock().await;
-            match ongoing.get(q).map(|ongoing| ongoing.subscribe()) {
+            match ongoing.get(q).map(|tx| tx.subscribe()) {
                 Some(rx) => {
                     // Another task is already handling this query
                     (rx, None)
