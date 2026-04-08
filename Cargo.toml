@@ -18,7 +18,7 @@ reqwest = "0.13"
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
 hickory-proto = "0.25"
-tokio = { version = "1.50", features = [
+tokio = { version = "1.51", features = [
     "rt-multi-thread",
     "sync",
     "net",
