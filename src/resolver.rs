@@ -1,7 +1,7 @@
 use crate::cache::DNSCache;
 use crate::config::Config;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use ahash::{HashMap, HashMapExt};
 use anyhow::Result;
@@ -34,11 +34,13 @@ impl Resolver {
 
         let mut builder = reqwest::Client::builder()
             .default_headers(headers)
-            .connect_timeout(std::time::Duration::from_secs(1))
-            .timeout(std::time::Duration::from_secs(3))
-            .pool_idle_timeout(std::time::Duration::from_secs(5))
-            .tcp_keepalive(Some(std::time::Duration::from_secs(5)))
-            .https_only(true)
+            .timeout(Duration::from_secs(3))
+            .pool_max_idle_per_host(1)
+            .http2_initial_stream_window_size(65_535)
+            .http2_initial_connection_window_size(65_535)
+            .http2_keep_alive_interval(Duration::from_secs(15))
+            .http2_keep_alive_while_idle(true)
+            .http2_keep_alive_timeout(Duration::from_secs(10))
             .no_hickory_dns();
 
         for s in config.groups.values().flatten() {
