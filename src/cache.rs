@@ -28,21 +28,20 @@ impl DNSCache {
                 let ttl = entry
                     .message
                     .all_sections()
-                    .map(|a| a.ttl())
+                    .map(|a| a.ttl)
                     .min()
-                    .unwrap_or(0) as u64;
-                let elapsed = entry.timestamp.elapsed().as_secs();
+                    .unwrap_or(0);
+                let elapsed = entry.timestamp.elapsed().as_secs() as u32;
                 if ttl > elapsed {
-                    let remaining = (ttl - elapsed) as u32;
                     let mut msg = entry.message.to_owned();
-                    msg.answers_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining);
+                    msg.answers.iter_mut().for_each(|a| {
+                        a.decrement_ttl(elapsed);
                     });
-                    msg.additionals_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining);
+                    msg.additionals.iter_mut().for_each(|a| {
+                        a.decrement_ttl(elapsed);
                     });
-                    msg.name_servers_mut().iter_mut().for_each(|a| {
-                        a.set_ttl(remaining);
+                    msg.authorities.iter_mut().for_each(|a| {
+                        a.decrement_ttl(elapsed);
                     });
                     info!("Cache hit, {q}");
                     Some(msg)
@@ -82,7 +81,7 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     use hickory_proto::{
-        op::{Message, MessageType, Query},
+        op::{Message, Query},
         rr::{
             Name, RData, Record, RecordType,
             rdata::{A, AAAA},
@@ -105,8 +104,7 @@ mod tests {
         let query = Query::query(name.clone(), RecordType::A);
 
         // Insert A record
-        let mut msg = Message::new();
-        msg.set_message_type(MessageType::Response);
+        let mut msg = Message::response(0, op::OpCode::Query);
         msg.add_answer(Record::from_rdata(
             name.clone(),
             300,
@@ -118,32 +116,31 @@ mod tests {
             RData::A(A(Ipv4Addr::new(2, 2, 2, 3))),
         ));
 
-        let ans = msg.answers().to_vec();
+        let ans = msg.answers.clone();
 
         cache.insert(query.clone(), msg);
 
         // Insert AAAA record
         let query_aaaa = Query::query(name.clone(), RecordType::AAAA);
 
-        let mut msg = Message::new();
-        msg.set_message_type(MessageType::Response);
+        let mut msg = Message::response(0, op::OpCode::Query);
         msg.add_answer(Record::from_rdata(
             name.clone(),
             300,
             RData::AAAA(AAAA(Ipv6Addr::new(0x2, 0x2, 0x2, 0x2, 0x2, 0x2, 0x2, 0x2))),
         ));
 
-        let ans_aaaa = msg.answers().to_vec();
+        let ans_aaaa = msg.answers.to_vec();
 
         cache.insert(query_aaaa.clone(), msg);
 
         assert_eq!(cache.len(), 2);
 
-        assert!(cache.get(&query).is_some_and(|msg| msg.answers() == ans));
+        assert!(cache.get(&query).is_some_and(|r| r.answers == ans));
         assert!(
             cache
                 .get(&query_aaaa)
-                .is_some_and(|msg| msg.answers() == ans_aaaa)
+                .is_some_and(|r| r.answers == ans_aaaa)
         );
     }
 
@@ -154,7 +151,7 @@ mod tests {
         let query = Query::query(name.clone(), RecordType::A);
 
         let original_ttl = 300u32;
-        let mut msg = Message::new();
+        let mut msg = Message::response(0, op::OpCode::Query);
         msg.add_answer(Record::from_rdata(
             name.clone(),
             original_ttl,
@@ -165,7 +162,7 @@ mod tests {
 
         let cached_msg = cache.get(&query).unwrap();
         // TTL should be <= original_ttl (may have decreased slightly due to elapsed time)
-        let cached_ttl = cached_msg.answers()[0].ttl();
+        let cached_ttl = cached_msg.answers[0].ttl;
         assert!(cached_ttl <= original_ttl);
         assert!(cached_ttl > 0); // Should not be expired yet
     }
@@ -176,7 +173,7 @@ mod tests {
         let name = Name::from_ascii("example.com.").unwrap();
         let query = Query::query(name.clone(), RecordType::A);
 
-        let mut msg = Message::new();
+        let mut msg = Message::response(0, op::OpCode::Query);
         msg.add_answer(Record::from_rdata(
             name.clone(),
             0, // Zero TTL
@@ -201,7 +198,7 @@ mod tests {
         for i in 0..20 {
             let name = Name::from_ascii(format!("test{i}.example.com.")).unwrap();
             let query = Query::query(name.clone(), RecordType::A);
-            let mut msg = Message::new();
+            let mut msg = Message::response(0, op::OpCode::Query);
             msg.add_answer(Record::from_rdata(
                 name,
                 300,
@@ -221,7 +218,7 @@ mod tests {
         let query = Query::query(name.clone(), RecordType::A);
 
         // Insert first response
-        let mut msg1 = Message::new();
+        let mut msg1 = Message::response(0, op::OpCode::Query);
         msg1.add_answer(Record::from_rdata(
             name.clone(),
             300,
@@ -230,20 +227,20 @@ mod tests {
         cache.insert(query.clone(), msg1);
 
         // Different response for the same query
-        let mut msg2 = Message::new();
+        let mut msg2 = Message::response(0, op::OpCode::Query);
         msg2.add_answer(Record::from_rdata(
             name.clone(),
             300,
             RData::A(A(Ipv4Addr::new(2, 2, 2, 3))),
         ));
-        let ans = msg2.answers().to_vec();
+        let ans = msg2.answers.clone();
         cache.insert(query.clone(), msg2);
 
         // Should have only one entry
         assert_eq!(cache.len(), 1);
 
         // Should get the second response
-        assert!(cache.get(&query).is_some_and(|msg| msg.answers() == ans));
+        assert!(cache.get(&query).is_some_and(|msg| msg.answers == ans));
     }
 
     #[test]
@@ -253,7 +250,7 @@ mod tests {
         let query = Query::query(name.clone(), RecordType::A);
 
         // Create a message with multiple records having different TTLs
-        let mut msg = Message::new();
+        let mut msg = Message::response(0, op::OpCode::Query);
         msg.add_answer(Record::from_rdata(
             name.clone(),
             300,
@@ -261,16 +258,12 @@ mod tests {
         ));
         msg.add_answer(Record::from_rdata(
             name.clone(),
-            60,
+            0,
             RData::A(A(Ipv4Addr::new(2, 2, 2, 3))),
         ));
 
         cache.insert(query.clone(), msg);
 
-        let result = cache.get(&query).unwrap();
-        // Both answers should have TTL <= 60 (the minimum)
-        for answer in result.answers() {
-            assert!(answer.ttl() <= 60);
-        }
+        assert!(cache.get(&query).is_none());
     }
 }

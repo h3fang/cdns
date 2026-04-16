@@ -81,7 +81,7 @@ impl Resolver {
         Ok((url.to_string(), msg))
     }
 
-    pub async fn query(&self, q: &op::Query, mut msg: op::Message) -> op::Message {
+    pub async fn query(&self, q: &op::Query, msg: op::Message) -> op::Message {
         // Try to get response from cache first
         if let Some(rsp) = self.cache.get(q) {
             return rsp;
@@ -117,8 +117,8 @@ impl Resolver {
                 }
                 Err(e) => {
                     error!("Resolve for {q} failed with error: {e}");
-                    msg.set_message_type(op::MessageType::Response)
-                        .set_response_code(op::ResponseCode::ServFail);
+                    let mut msg = msg.into_response();
+                    msg.metadata.response_code = op::ResponseCode::ServFail;
                     msg
                 }
             };
@@ -144,8 +144,8 @@ impl Resolver {
 
                 // Anyway, we handle it gracefully by returning a `ServFail`.
                 error!("Query channel for {q} failed with error {e}");
-                msg.set_message_type(op::MessageType::Response)
-                    .set_response_code(op::ResponseCode::ServFail);
+                let mut msg = msg.into_response();
+                msg.metadata.response_code = op::ResponseCode::ServFail;
                 msg
             }
         }
@@ -178,14 +178,14 @@ impl Resolver {
 
     pub async fn resolve(&self, mut msg: op::Message) -> op::Message {
         // ensure there is one and only one query in DNS message
-        let n = msg.queries().iter().count();
+        let n = msg.queries.len();
         if n != 1 {
             warn!("{n} question(s) found in DNS query datagram.");
-            msg.set_message_type(op::MessageType::Response)
-                .set_response_code(op::ResponseCode::FormErr);
+            let mut msg = msg.into_response();
+            msg.metadata.response_code = op::ResponseCode::FormErr;
             return msg;
         }
-        let q = msg.queries()[0].to_owned();
+        let q = msg.queries[0].to_owned();
 
         info!("query {q}");
 
@@ -195,12 +195,12 @@ impl Resolver {
         as "application/dns-message", SHOULD use a DNS ID of 0 in every DNS request.
         From https://datatracker.ietf.org/doc/html/rfc8484#section-4.1
         */
-        let id = msg.id();
-        msg.set_id(0);
+        let id = msg.id;
+        msg.metadata.id = 0;
 
         // resolve from multiple DNS servers
         let mut rsp = self.query(&q, msg).await;
-        rsp.set_id(id);
+        rsp.metadata.id = id;
         rsp
     }
 }
@@ -210,27 +210,22 @@ mod tests {
     use super::*;
     use futures::future::join_all;
     use hickory_proto::rr;
-    use std::sync::atomic::{AtomicU16, Ordering};
-
-    static QUERY_ID: AtomicU16 = AtomicU16::new(0);
 
     async fn resolve_domain(domain: &str, resolver: &Resolver) -> anyhow::Result<()> {
         let name = rr::Name::from_ascii(domain)
             .unwrap_or_else(|e| panic!("Invalid domain: {domain}, error: {e}"));
         let q = op::Query::query(name.to_owned(), rr::RecordType::A);
-        let id = QUERY_ID.fetch_add(1, Ordering::Relaxed);
-        let mut msg = op::Message::new();
-        msg.set_id(id)
-            .add_query(q.to_owned())
-            .set_message_type(op::MessageType::Query)
-            .set_recursion_desired(true);
+        let mut msg = op::Message::query();
+        let id = msg.id;
+        msg.metadata.recursion_desired = true;
+        msg.add_query(q.to_owned());
 
         let r = resolver.resolve(msg).await;
 
-        assert_eq!(id, r.id());
-        assert_eq!(q, r.queries()[0]);
-        assert!(!r.answers().is_empty());
-        assert_eq!(name, *r.answers()[0].name());
+        assert_eq!(id, r.id);
+        assert_eq!(q, r.queries[0]);
+        assert!(!r.answers.is_empty());
+        assert_eq!(name, r.answers[0].name);
         Ok(())
     }
 

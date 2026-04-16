@@ -78,6 +78,6 @@ async fn handle_query(
     let msg = resolver.resolve(msg).await;
     let bytes = msg.to_vec()?;
     sock.send_to(&bytes, addr).await?;
-    info!("{:?}", msg.answers());
+    info!("{:?}", msg.answers);
     Ok(())
 }
