@@ -12,20 +12,20 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 ahash = "0.8"
-quick_cache = "0.6"
+quick_cache = "0.7"
 
 reqwest = "0.13"
 futures = "0.3"
 url = { version = "2.5", features = ["serde"] }
 hickory-proto = "0.26"
-tokio = { version = "1.52", features = [
+tokio = { version = "1.53", features = [
     "rt-multi-thread",
     "sync",
     "net",
     "macros",
     "time",
 ] }
-bytes = "1.11"
+bytes = "1.12"
 
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
